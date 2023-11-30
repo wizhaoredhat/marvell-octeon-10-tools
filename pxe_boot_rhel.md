@@ -23,7 +23,7 @@ Components of the setup:
 
 # Setting up DHCP
 
-The DHCP server for the purposes of this document of installing RHEL will be used to give the UEFI bootloader an IP address when attempting to PXE boot the ISO image through TFTP. (Note: This DHCP server can also be used by U-Boot to burn the UEFI bootloader onto the secondary SPI memory device on the Marvell Octeon 10.)
+The DHCP server for the purposes of this document of installing RHEL will be used to give the UEFI bootloader an IP address when attempting to PXE boot the ISO image through TFTP. (Note: This DHCP server can also be used by U-Boot to burn the UEFI bootloader onto the secondary SPI memory device on the Marvell Octeon 10).
 
 Start by installing the DHCP server for RHEL on the host:
 

@@ -45,6 +45,7 @@ tcl
 tk
 nfs-utils
 chrony
+dhclient
 vim
 ethtool
 git

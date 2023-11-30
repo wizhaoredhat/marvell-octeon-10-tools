@@ -1,7 +1,7 @@
 FROM quay.io/centos/centos:stream9 
 
 RUN dnf install -y \
-	tftp tftp-server dhcp-server python39 python3-pip minicom procps && \
+	tftp tftp-server dhcp-server python39 python3-pip minicom procps iproute iputils && \
 	ln -s /usr/bin/python3.9 /usr/bin/python && \	
 	pip3.9 install requests && \
 	pip3.9 install pexpect
