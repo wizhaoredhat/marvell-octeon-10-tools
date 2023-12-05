@@ -19,6 +19,12 @@ children = []
 iso_mount_path = "/mnt/rhel_9_2_iso"
 iso_path = "/root/RHEL-9.2.0-20230531.18-aarch64-dvd1.iso"
 
+def run_process(cmd):
+    p = Process(target=run, args=(cmd,))
+    p.start()
+    return p
+
+
 def wait_any_ping(hn, timeout):
     print("Waiting for response from ping")
     begin = time.time()
@@ -39,7 +45,7 @@ def ping(hn):
 
 def wait_for_boot():
     try:
-        candidates = list(f"172.31.100.{x}" for x in range(10, 21))
+        candidates = list(f"172.131.100.{x}" for x in range(10, 21))
         response_ip = wait_any_ping(candidates, 12000)
         print(f"got response from {response_ip}")
     except Exception as e:
@@ -136,7 +142,7 @@ def setup_tftp():
     os.makedirs("/var/lib/tftpboot/pxelinux", exist_ok=True)
     print("starting in.tftpd")
     run("killall in.tftpd")
-    p = run("/usr/sbin/in.tftpd -s -L /var/lib/tftpboot")
+    p = run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     children.append(p)
     shutil.copy(f"{iso_mount_path}/images/pxeboot/vmlinuz", "/var/lib/tftpboot/pxelinux")
     shutil.copy(f"{iso_mount_path}/images/pxeboot/initrd.img", "/var/lib/tftpboot/pxelinux")
@@ -150,7 +156,7 @@ def setup_dhcp():
     run("ip addr add 172.131.100.1/24 dev eno4")
     shutil.copy(f"manifests/pxeboot/dhcpd.conf", "/etc/dhcp/dhcpd.conf")
     run("killall dhcpd")
-    p = run("/usr/sbin/dhcpd -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd")
+    p = run_process("/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd")
     children.append(p)
 
 def mount_iso():
@@ -173,12 +179,9 @@ def try_pxeboot():
     uefi_pxe_boot()
     print("Terminating http, tftp, and dhcpd")
     for e in children:
-        try:
-            e.terminate()
-        except:
-            pass
-    run("pkill dhcpd")
-    run("pkill in.tftpd")
+        e.terminate()
+
+
     
 
 
