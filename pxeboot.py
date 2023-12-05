@@ -1,23 +1,30 @@
 import argparse
 import os
 import signal
-import sys
 from multiprocessing import Process
-import threading
 import pexpect
 import time
-import io
 import shutil
 import http.server
-import requests
-
 from reset import reset
 from common_dpu import run, minicom_cmd
 
 
 children = []
-iso_mount_path = "/mnt/rhel_9_2_iso"
-iso_path = "/root/RHEL-9.2.0-20230531.18-aarch64-dvd1.iso"
+iso_mount_path = "/mnt/marvel_dpu_iso"
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Process ISO file.")
+    parser.add_argument("iso", type=str, help="Mandatory argument of type string for ISO file (make sure the path to this file was mounted when running the pod via -v /host/iso:/container/iso).")
+    parser.add_argument("--dev", type=str, default="eno4", help="Optional argument of type string for device. Default is 'eno4'.")
+
+    args = parser.parse_args()
+    if not os.path.exists(args.iso):
+        print(f"Couldn't read iso file {args.iso}")
+        raise Exception("Invalid path to iso provided")
+
+    return args
 
 def run_process(cmd):
     p = Process(target=run, args=(cmd,))
@@ -44,6 +51,7 @@ def ping(hn):
 
 
 def wait_for_boot():
+    time.sleep(1000)
     try:
         candidates = list(f"172.131.100.{x}" for x in range(10, 21))
         response_ip = wait_any_ping(candidates, 12000)
@@ -138,7 +146,6 @@ def setup_http():
 
 def setup_tftp():
     print("Configuring TFTP")
-    run("sed -i 's|^ExecStart=/usr/sbin/in.tftpd|ExecStart=/usr/sbin/in.tftpd -B 1468|' /usr/lib/systemd/system/tftp.service")
     os.makedirs("/var/lib/tftpboot/pxelinux", exist_ok=True)
     print("starting in.tftpd")
     run("killall in.tftpd")
@@ -150,40 +157,34 @@ def setup_tftp():
     os.chmod("/var/lib/tftpboot/grubaa64.efi", 0o744)
     shutil.copy(f"manifests/pxeboot/grub.cfg", "/var/lib/tftpboot/grub.cfg")
 
-def setup_dhcp():
+def setup_dhcp(dev: str):
     print("Configuring DHCP")
-    #TODO add dev name from args
-    run("ip addr add 172.131.100.1/24 dev eno4")
+    run(f"ip addr add 172.131.100.1/24 dev {dev}")
     shutil.copy(f"manifests/pxeboot/dhcpd.conf", "/etc/dhcp/dhcpd.conf")
     run("killall dhcpd")
     p = run_process("/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd")
     children.append(p)
 
-def mount_iso():
-    #TODO get iso into container from argument
+def mount_iso(iso):
     os.makedirs(iso_mount_path, exist_ok=True)
     run(f"umount {iso_mount_path}")
-    run(f"mount -t iso9660 -o loop {iso_path} {iso_mount_path}")
+    run(f"mount -t iso9660 -o loop {iso} {iso_mount_path}")
 
-def prepare_pxeboot():
-    setup_dhcp()
-    mount_iso()
+def prepare_pxeboot(args):
+    setup_dhcp(args.dev)
+    mount_iso(args.iso)
     setup_tftp()
     setup_http()
 
-def try_pxeboot():
+def try_pxeboot(args):
     print("Preparing services for Pxeboot")
-    prepare_pxeboot()
+    prepare_pxeboot(args)
     print("Giving services time to settle")
     time.sleep(10)
     uefi_pxe_boot()
     print("Terminating http, tftp, and dhcpd")
     for e in children:
         e.terminate()
-
-
-    
-
 
 def kill_existing():
     pids = [pid for pid in os.listdir('/proc') if pid.isdigit()]
@@ -203,8 +204,9 @@ def kill_existing():
 
 
 def main():
+    args = parse_args()
     kill_existing()
-    try_pxeboot()
+    try_pxeboot(args)
 
 if __name__ == "__main__":
     main()

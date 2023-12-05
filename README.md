@@ -3,16 +3,29 @@ Marvell Octeon 10 Tools
 
 ```
 sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev quay.io/sdaniele/marvell-tools
-sudo podman exec -it marvell-tools /bin/bash
+sudo podman exec -it marvell-tools <cmd>
 ```
 
 ## Tools
 
 ### Reset
 
-Utilize the serial interface at /dev.ttyUSB1 to trigger a reset of the associated Marvell DPU
+Utilize the serial interface at /dev/ttyUSB1 to trigger a reset of the associated Marvell DPU
+
+Usage:
+```
+python reset.py
+```
 
 ### PxeBoot
+
+Utilize the serial interface at /dev/ttyUSB0 to pxeboot the card with the provided ISO
+
+Usage:
+```
+sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev -v /<path_to_iso>/iso:/tmp/iso quay.io/sdaniele/marvell-tools
+python pxeboot.py /tmp/iso eno4
+```
 
 Pre-requisites:
 - Ensure dhcpd, and tftpf are not actively running on the host, as these services will be handled automatically from the container
