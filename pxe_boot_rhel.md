@@ -1,6 +1,6 @@
 # Introduction
 
-The surge in networking demands and cost has peaked interest in Data Processing Units (DPUs). The Marvell Octeon 10 DPU addresses these challenges with their hardware solution. RHEL excels at running everywhere from the public cloud to the edge. Bringing RHEL onto the Marvell Octeon 10 DPU is the first step in realizing and building a vibrant ecosystem for open source collaboration in solving these challenges. Red Hat along with its ecosystem partners can plan and bring their solutions onto the Marvell Octeon 10 DPU.
+The surge in networking demands and cost has peaked interest in Data Processing Units (DPUs). The Marvell® Octeon® 10 DPU addresses these challenges with their hardware solution. RHEL excels at running everywhere from the public cloud to the edge. Bringing RHEL onto the Marvell Octeon 10 DPU is the first step in realizing and building a vibrant ecosystem for open source collaboration in solving these challenges. Red Hat along with its ecosystem partners can plan and bring their solutions onto the Marvell Octeon 10 DPU.
 
 # Installing RHEL on Marvell Octeon 10
 
