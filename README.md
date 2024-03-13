@@ -23,8 +23,9 @@ Utilize the serial interface at /dev/ttyUSB0 to pxeboot the card with the provid
 
 Usage:
 ```
-sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev -v /<path_to_iso>/iso:/tmp/iso quay.io/sdaniele/marvell-tools
-python pxeboot.py /tmp/iso eno4
+sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev -v /<path_to_iso>/iso:/tmp/iso quay.io/wizhao/marvell-tools
+sudo podman exec -it marvell-tools /bin/bash
+python pxeboot.py --dev eno4 /tmp/iso
 ```
 
 Pre-requisites:
