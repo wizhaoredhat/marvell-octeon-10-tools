@@ -253,7 +253,7 @@ python -m http.server 80
 
 # Installing via UEFI PXE Boot on the 10G Management Port
 
-The steps above should have prepared the necessary files and servers running to PXE boot. Please make sure all the steps above are preformed and the DHCP, TFTP, and HTTP servers are running.
+The steps above should have prepared the necessary files and servers running to PXE boot. Please make sure all the steps above are performed and the DHCP, TFTP, and HTTP servers are running.
 
 Firstly you should install minicom:
 
@@ -333,7 +333,7 @@ The following menu should now be visible:
   ^v=Move Highlight       <Enter>=Select Entry
 ```
 
-Move to the `Boot Manager` and press `<ENTER>`. Then move through the menu until you hit and interface with the MAC address `80AA9988776A` and the UEFI PXEv4 option.
+Move to the `Boot Manager` and press `<ENTER>`. Then move through the menu until you hit an interface with the MAC address `80AA9988776A` and the UEFI PXEv4 option.
 
 ```bash
 /------------------------------------------------------------------------------\
