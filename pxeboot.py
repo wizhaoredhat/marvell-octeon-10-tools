@@ -100,7 +100,9 @@ def select_pxe_entry():
         child.send(KEY_DOWN)
         time.sleep(0.1)
         try:
-            child.expect("UEFI PXEv4.*MAC:80AA9988776A", timeout=1)
+            # TODO: FIXME: We need to read the port configuration.
+            # e.g. 80AA99887766 + number of lanes used in the SERDES
+            child.expect("UEFI PXEv4.*MAC:80AA99887767", timeout=1)
             break
         except Exception:
             retry -= 1
