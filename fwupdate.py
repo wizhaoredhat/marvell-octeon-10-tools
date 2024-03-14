@@ -49,7 +49,7 @@ def ping(hn):
     return run(ping_cmd).returncode == 0
 
 
-def firmware_update():
+def firmware_update(img):
     print("firmware updating")
     ESC = "\x1b"
     KEY_DOWN = '\x1b[B'
@@ -74,31 +74,50 @@ def firmware_update():
     child.send(ESC*5)
     print("waiting on uboot prompt")
     child.expect("crb106-pcie>", 5)
-    print("Enabling 100G management port")
+    print("enabling 100G management port")
     child.send("setenv ethact rvu_pf#1")
     child.send(KEY_ENTER)
+    time.sleep(1)
+    print("saving environment")
     child.send("saveenv")
     child.send(KEY_ENTER)
     child.expect("OK", 10)
+    time.sleep(1)
+    print("enabling dhcp")
+    child.send("dhcp")
+    child.send(KEY_ENTER)
+    child.expect("DHCP client bound to address", 10)
+    time.sleep(1)
+    print("set serverip")
     child.send("setenv serverip 172.131.100.1")
     child.send(KEY_ENTER)
-    child.send("tftpboot $loadaddr flash-uefi-cn10ka.img")
+    time.sleep(1)
+    print("tftp the image")
+    child.send(f"tftpboot $loadaddr {img}")
     child.send(KEY_ENTER)
-    # set to secondary SPI flash
+    child.expect("Bytes transferred", 10)
+    time.sleep(1)
+    print("set to secondary SPI flash")
     child.send("sf probe 1:0")
     child.send(KEY_ENTER)
+    child.expect("SF: Detected", 10)
+    time.sleep(1)
+    print("updating flash!")
     child.send("sf update $fileaddr 0 $filesize")
     child.send(KEY_ENTER)
+    child.expect("bytes written", 10)
+    time.sleep(1)
+    print("reseting")
     child.send("reset")
     child.send(KEY_ENTER)
     child.close()
     print("Closing minicom")
 
-def uboot_firmware_update():
+def uboot_firmware_update(args):
     print("Starting FW Update")
     print("Resetting card")
     reset()
-    firmware_update()
+    firmware_update(args.img)
 
 def setup_tftp(img):
     print("Configuring TFTP")
@@ -126,7 +145,7 @@ def try_fwupdate(args):
     prepare_fwupdate(args)
     print("Giving services time to settle")
     time.sleep(10)
-    uboot_firmware_update()
+    uboot_firmware_update(args)
     print("Terminating http, tftp, and dhcpd")
     for e in children:
         e.terminate()
