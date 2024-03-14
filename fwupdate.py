@@ -49,11 +49,12 @@ def ping(hn):
     return run(ping_cmd).returncode == 0
 
 
-def firmware_update(img):
+def firmware_update(img_path):
     print("firmware updating")
     ESC = "\x1b"
     KEY_DOWN = '\x1b[B'
     KEY_ENTER = '\r\n'
+    img = os.path.basename(img_path)
 
     run("pkill -9 minicom")
     print("spawn minicom")
@@ -77,16 +78,16 @@ def firmware_update(img):
     print("enabling 100G management port")
     child.send("setenv ethact rvu_pf#1")
     child.send(KEY_ENTER)
-    time.sleep(1)
+    time.sleep(3)
     print("saving environment")
     child.send("saveenv")
     child.send(KEY_ENTER)
     child.expect("OK", 10)
-    time.sleep(1)
+    time.sleep(3)
     print("enabling dhcp")
     child.send("dhcp")
     child.send(KEY_ENTER)
-    child.expect("DHCP client bound to address", 10)
+    child.expect("DHCP client bound to address", 30)
     time.sleep(1)
     print("set serverip")
     child.send("setenv serverip 172.131.100.1")
@@ -95,7 +96,7 @@ def firmware_update(img):
     print("tftp the image")
     child.send(f"tftpboot $loadaddr {img}")
     child.send(KEY_ENTER)
-    child.expect("Bytes transferred", 10)
+    child.expect("Bytes transferred", 100)
     time.sleep(1)
     print("set to secondary SPI flash")
     child.send("sf probe 1:0")
@@ -105,7 +106,7 @@ def firmware_update(img):
     print("updating flash!")
     child.send("sf update $fileaddr 0 $filesize")
     child.send(KEY_ENTER)
-    child.expect("bytes written", 10)
+    child.expect("bytes written", 500)
     time.sleep(1)
     print("reseting")
     child.send("reset")
