@@ -1,20 +1,23 @@
 import argparse
-import os
-import signal
-from multiprocessing import Process
-import pexpect
-import time
-import shutil
 import http.server
-from reset import reset
+import os
+import pexpect
+import shutil
+import signal
+import time
+
+from collections.abc import Iterable
+from multiprocessing import Process
+
 from common_dpu import run, minicom_cmd
+from reset import reset
 
 
 children = []
 iso_mount_path = "/mnt/marvel_dpu_iso"
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Process ISO file.")
     parser.add_argument(
         "iso",
@@ -36,16 +39,17 @@ def parse_args():
     return args
 
 
-def run_process(cmd):
+def run_process(cmd: str) -> Process:
     p = Process(target=run, args=(cmd,))
     p.start()
     return p
 
 
-def wait_any_ping(hn, timeout):
+def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
     print("Waiting for response from ping")
     begin = time.time()
     end = begin
+    hn = list(hn)
     while end - begin < timeout:
         for e in hn:
             if ping(e):
@@ -55,12 +59,12 @@ def wait_any_ping(hn, timeout):
     raise Exception(f"No response after {round(end - begin, 2)}s")
 
 
-def ping(hn):
+def ping(hn: str) -> bool:
     ping_cmd = f"timeout 1 ping -4 -c 1 {hn}"
     return run(ping_cmd).returncode == 0
 
 
-def wait_for_boot():
+def wait_for_boot() -> None:
     time.sleep(1000)
     try:
         candidates = [f"172.131.100.{x}" for x in range(10, 21)]
@@ -71,7 +75,7 @@ def wait_for_boot():
         raise e
 
 
-def select_pxe_entry():
+def select_pxe_entry() -> None:
     print("selecting pxe entry")
     ESC = "\x1b"
     KEY_DOWN = "\x1b[B"
@@ -138,7 +142,7 @@ def select_pxe_entry():
     print("Closing minicom")
 
 
-def uefi_pxe_boot():
+def uefi_pxe_boot() -> None:
     print("Starting UEFI PXE Boot")
     print("Resetting card")
     reset()
@@ -146,7 +150,7 @@ def uefi_pxe_boot():
     wait_for_boot()
 
 
-def http_server():
+def http_server() -> None:
     os.chdir("/www")
     server_address = ("", 80)
     handler = http.server.SimpleHTTPRequestHandler
@@ -154,7 +158,7 @@ def http_server():
     httpd.serve_forever()
 
 
-def setup_http():
+def setup_http() -> None:
     os.makedirs("/www", exist_ok=True)
     run(f"ln -s {iso_mount_path} /www")
     shutil.copy("manifests/pxeboot/kickstart.ks", "/www/")
@@ -164,7 +168,7 @@ def setup_http():
     children.append(p)
 
 
-def setup_tftp():
+def setup_tftp() -> None:
     print("Configuring TFTP")
     os.makedirs("/var/lib/tftpboot/pxelinux", exist_ok=True)
     print("starting in.tftpd")
@@ -182,7 +186,7 @@ def setup_tftp():
     shutil.copy("manifests/pxeboot/grub.cfg", "/var/lib/tftpboot/grub.cfg")
 
 
-def setup_dhcp(dev: str):
+def setup_dhcp(dev: str) -> None:
     print("Configuring DHCP")
     run(f"ip addr add 172.131.100.1/24 dev {dev}")
     shutil.copy("manifests/pxeboot/dhcpd.conf", "/etc/dhcp/dhcpd.conf")
@@ -193,20 +197,20 @@ def setup_dhcp(dev: str):
     children.append(p)
 
 
-def mount_iso(iso):
+def mount_iso(iso: str) -> None:
     os.makedirs(iso_mount_path, exist_ok=True)
     run(f"umount {iso_mount_path}")
     run(f"mount -t iso9660 -o loop {iso} {iso_mount_path}")
 
 
-def prepare_pxeboot(args):
+def prepare_pxeboot(args: argparse.Namespace) -> None:
     setup_dhcp(args.dev)
     mount_iso(args.iso)
     setup_tftp()
     setup_http()
 
 
-def try_pxeboot(args):
+def try_pxeboot(args: argparse.Namespace) -> None:
     print("Preparing services for Pxeboot")
     prepare_pxeboot(args)
     print("Giving services time to settle")
@@ -217,7 +221,7 @@ def try_pxeboot(args):
         e.terminate()
 
 
-def kill_existing():
+def kill_existing() -> None:
     pids = [pid for pid in os.listdir("/proc") if pid.isdigit()]
 
     own_pid = os.getpid()
@@ -234,7 +238,7 @@ def kill_existing():
             pass
 
 
-def main():
+def main() -> None:
     args = parse_args()
     kill_existing()
     try_pxeboot(args)

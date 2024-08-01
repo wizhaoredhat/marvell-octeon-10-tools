@@ -1,18 +1,22 @@
 import argparse
 import os
-import signal
-from multiprocessing import Process
 import pexpect
-import time
 import shutil
+import signal
+import time
+
+from collections.abc import Iterable
+from multiprocessing import Process
+
+from common_dpu import minicom_cmd
+from common_dpu import run
 from reset import reset
-from common_dpu import run, minicom_cmd
 
 
 children = []
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Process FW IMG file.")
     parser.add_argument(
         "img",
@@ -34,16 +38,17 @@ def parse_args():
     return args
 
 
-def run_process(cmd):
+def run_process(cmd: str) -> Process:
     p = Process(target=run, args=(cmd,))
     p.start()
     return p
 
 
-def wait_any_ping(hn, timeout):
+def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
     print("Waiting for response from ping")
     begin = time.time()
     end = begin
+    hn = list(hn)
     while end - begin < timeout:
         for e in hn:
             if ping(e):
@@ -53,7 +58,7 @@ def wait_any_ping(hn, timeout):
     raise Exception(f"No response after {round(end - begin, 2)}s")
 
 
-def ping(hn):
+def ping(hn: str) -> bool:
     ping_cmd = f"timeout 1 ping -4 -c 1 {hn}"
     return run(ping_cmd).returncode == 0
 
@@ -63,7 +68,7 @@ KEY_DOWN = "\x1b[B"
 KEY_ENTER = "\r\n"
 
 
-def firmware_update(img_path):
+def firmware_update(img_path: str) -> None:
     print("firmware updating")
     img = os.path.basename(img_path)
 
@@ -126,14 +131,14 @@ def firmware_update(img_path):
     print("Closing minicom")
 
 
-def uboot_firmware_update(args):
+def uboot_firmware_update(args: argparse.Namespace) -> None:
     print("Starting FW Update")
     print("Resetting card")
     reset()
     firmware_update(args.img)
 
 
-def setup_tftp(img):
+def setup_tftp(img: str) -> None:
     print("Configuring TFTP")
     os.makedirs("/var/lib/tftpboot", exist_ok=True)
     print("starting in.tftpd")
@@ -143,7 +148,7 @@ def setup_tftp(img):
     shutil.copy(f"{img}", "/var/lib/tftpboot")
 
 
-def setup_dhcp(dev: str):
+def setup_dhcp(dev: str) -> None:
     print("Configuring DHCP")
     run(f"ip addr add 172.131.100.1/24 dev {dev}")
     shutil.copy("manifests/pxeboot/dhcpd.conf", "/etc/dhcp/dhcpd.conf")
@@ -154,12 +159,12 @@ def setup_dhcp(dev: str):
     children.append(p)
 
 
-def prepare_fwupdate(args):
+def prepare_fwupdate(args: argparse.Namespace) -> None:
     setup_dhcp(args.dev)
     setup_tftp(args.img)
 
 
-def try_fwupdate(args):
+def try_fwupdate(args: argparse.Namespace) -> None:
     print("Preparing services for FW update")
     prepare_fwupdate(args)
     print("Giving services time to settle")
@@ -170,7 +175,7 @@ def try_fwupdate(args):
         e.terminate()
 
 
-def kill_existing():
+def kill_existing() -> None:
     pids = [pid for pid in os.listdir("/proc") if pid.isdigit()]
 
     own_pid = os.getpid()
@@ -187,7 +192,7 @@ def kill_existing():
             pass
 
 
-def main():
+def main() -> None:
     args = parse_args()
     kill_existing()
     try_fwupdate(args)

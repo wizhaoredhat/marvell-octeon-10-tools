@@ -1,14 +1,16 @@
 import pexpect
 import time
 
-from common_dpu import run, minicom_cmd
+from common_dpu import minicom_cmd
+from common_dpu import run
+
 
 ESC = "\x1b"
 KEY_DOWN = "\x1b[B"
 KEY_ENTER = "\r\n"
 
 
-def reset():
+def reset() -> None:
     run("pkill -9 minicom")
     print("spawn minicom")
     child = pexpect.spawn(minicom_cmd("/dev/ttyUSB1"))
@@ -35,7 +37,7 @@ def reset():
     child.close()
 
 
-def main():
+def main() -> None:
     reset()
 
 
