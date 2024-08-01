@@ -8,15 +8,21 @@ def minicom_cmd(device):
     return f"minicom -D {device}"
 
 
+Result = namedtuple("Result", "out err returncode")
+
+
 def run(cmd: str, env: dict = os.environ.copy()):
     print(f"running {cmd}")
-    Result = namedtuple("Result", "out err returncode")
     args = shlex.split(cmd)
-    pipe = subprocess.PIPE
-    with subprocess.Popen(args, stdout=pipe, stderr=pipe, env=env) as proc:
-        out = proc.stdout.read().decode("utf-8")
-        err = proc.stderr.read().decode("utf-8")
-        proc.communicate()
-        ret = proc.returncode
-    print(f"Result: {Result.out}\n{Result.err}\n{ret}\n")
-    return Result(out, err, ret)
+    res = subprocess.run(
+        args,
+        capture_output=True,
+        env=env,
+    )
+
+    result = Result(
+        res.stdout.decode("utf-8"), res.stderr.decode("utf-8"), res.returncode
+    )
+
+    print(f"Result: {result.out}\n{result.err}\n{result.returncode}\n")
+    return result
