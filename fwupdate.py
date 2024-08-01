@@ -5,7 +5,6 @@ from multiprocessing import Process
 import pexpect
 import time
 import shutil
-import http.server
 from reset import reset
 from common_dpu import run, minicom_cmd
 
@@ -59,11 +58,13 @@ def ping(hn):
     return run(ping_cmd).returncode == 0
 
 
+ESC = "\x1b"
+KEY_DOWN = "\x1b[B"
+KEY_ENTER = "\r\n"
+
+
 def firmware_update(img_path):
     print("firmware updating")
-    ESC = "\x1b"
-    KEY_DOWN = "\x1b[B"
-    KEY_ENTER = "\r\n"
     img = os.path.basename(img_path)
 
     run("pkill -9 minicom")
@@ -76,7 +77,7 @@ def firmware_update(img_path):
     print("Pressing B to access boot menu")
     child.send("b")
     print("waiting for instructions to Boot from Primary Boot Device")
-    child.expect("1\) Boot from Primary Boot Device", 10)
+    child.expect("1\\) Boot from Primary Boot Device", 10)
     time.sleep(1)
     child.send("1")
     print("waiting to escape to uboot menu")
@@ -145,7 +146,7 @@ def setup_tftp(img):
 def setup_dhcp(dev: str):
     print("Configuring DHCP")
     run(f"ip addr add 172.131.100.1/24 dev {dev}")
-    shutil.copy(f"manifests/pxeboot/dhcpd.conf", "/etc/dhcp/dhcpd.conf")
+    shutil.copy("manifests/pxeboot/dhcpd.conf", "/etc/dhcp/dhcpd.conf")
     run("killall dhcpd")
     p = run_process(
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"

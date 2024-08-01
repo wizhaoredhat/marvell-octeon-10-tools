@@ -63,7 +63,7 @@ def ping(hn):
 def wait_for_boot():
     time.sleep(1000)
     try:
-        candidates = list(f"172.131.100.{x}" for x in range(10, 21))
+        candidates = [f"172.131.100.{x}" for x in range(10, 21)]
         response_ip = wait_any_ping(candidates, 12000)
         print(f"got response from {response_ip}")
     except Exception as e:
@@ -87,7 +87,7 @@ def select_pxe_entry():
     print("Pressing B to access boot menu")
     child.send("b")
     print("waiting for instructions to Boot from Secondary Boot Device")
-    child.expect("2\) Boot from Secondary Boot Device", 10)
+    child.expect("2\\) Boot from Secondary Boot Device", 10)
     time.sleep(1)
     child.send("2")
     print("waiting to escape to UEFI boot menu")
@@ -157,7 +157,7 @@ def http_server():
 def setup_http():
     os.makedirs("/www", exist_ok=True)
     run(f"ln -s {iso_mount_path} /www")
-    shutil.copy(f"manifests/pxeboot/kickstart.ks", "/www/")
+    shutil.copy("manifests/pxeboot/kickstart.ks", "/www/")
 
     p = Process(target=http_server)
     p.start()
@@ -179,13 +179,13 @@ def setup_tftp():
     )
     shutil.copy(f"{iso_mount_path}/EFI/BOOT/grubaa64.efi", "/var/lib/tftpboot/")
     os.chmod("/var/lib/tftpboot/grubaa64.efi", 0o744)
-    shutil.copy(f"manifests/pxeboot/grub.cfg", "/var/lib/tftpboot/grub.cfg")
+    shutil.copy("manifests/pxeboot/grub.cfg", "/var/lib/tftpboot/grub.cfg")
 
 
 def setup_dhcp(dev: str):
     print("Configuring DHCP")
     run(f"ip addr add 172.131.100.1/24 dev {dev}")
-    shutil.copy(f"manifests/pxeboot/dhcpd.conf", "/etc/dhcp/dhcpd.conf")
+    shutil.copy("manifests/pxeboot/dhcpd.conf", "/etc/dhcp/dhcpd.conf")
     run("killall dhcpd")
     p = run_process(
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
