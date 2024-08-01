@@ -1,10 +1,20 @@
-FROM quay.io/centos/centos:stream9 
+FROM quay.io/centos/centos:stream9
 
-RUN dnf install -y \
-	tftp tftp-server dhcp-server python39 python3-pip minicom procps iproute iputils && \
-	ln -s /usr/bin/python3.9 /usr/bin/python && \	
-	pip3.9 install requests && \
-	pip3.9 install pexpect
+RUN dnf install \
+        dhcp-server \
+        iproute \
+        iputils \
+        minicom \
+        procps \
+        python3-pip \
+        python39 \
+        tftp \
+        tftp-server \
+        -y && \
+    ln -s /usr/bin/python3.9 /usr/bin/python && \
+    pip3.9 install \
+        requests \
+        pexpect
 
 COPY * /
 COPY manifests /manifests
