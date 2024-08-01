@@ -3,8 +3,10 @@ import subprocess
 import os
 import shlex
 
+
 def minicom_cmd(device):
-    return f'minicom -D {device}'
+    return f"minicom -D {device}"
+
 
 def run(cmd: str, env: dict = os.environ.copy()):
     print(f"running {cmd}")

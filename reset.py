@@ -4,8 +4,9 @@ import time
 from common_dpu import run, minicom_cmd
 
 ESC = "\x1b"
-KEY_DOWN = '\x1b[B'
-KEY_ENTER = '\r\n'
+KEY_DOWN = "\x1b[B"
+KEY_ENTER = "\r\n"
+
 
 def reset():
     run("pkill -9 minicom")
@@ -21,7 +22,7 @@ def reset():
     time.sleep(1)
     print("Waiting on SCP Main Menu")
     child.expect("SCP Main Menu", timeout=3)
-    child.sendline('m')
+    child.sendline("m")
     time.sleep(1)
     child.sendcontrol("m")
     time.sleep(1)
@@ -33,8 +34,10 @@ def reset():
     time.sleep(1)
     child.close()
 
+
 def main():
     reset()
+
 
 if __name__ == "__main__":
     main()

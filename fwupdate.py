@@ -15,8 +15,17 @@ children = []
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Process FW IMG file.")
-    parser.add_argument("img", type=str, help="Mandatory argument of type string for IMG file (make sure the path to this file was mounted when running the pod via -v /host/img:/container/img).")
-    parser.add_argument("--dev", type=str, default="eno4", help="Optional argument of type string for device. Default is 'eno4'.")
+    parser.add_argument(
+        "img",
+        type=str,
+        help="Mandatory argument of type string for IMG file (make sure the path to this file was mounted when running the pod via -v /host/img:/container/img).",
+    )
+    parser.add_argument(
+        "--dev",
+        type=str,
+        default="eno4",
+        help="Optional argument of type string for device. Default is 'eno4'.",
+    )
 
     args = parser.parse_args()
     if not os.path.exists(args.img):
@@ -24,6 +33,7 @@ def parse_args():
         raise Exception("Invalid path to omg provided")
 
     return args
+
 
 def run_process(cmd):
     p = Process(target=run, args=(cmd,))
@@ -52,8 +62,8 @@ def ping(hn):
 def firmware_update(img_path):
     print("firmware updating")
     ESC = "\x1b"
-    KEY_DOWN = '\x1b[B'
-    KEY_ENTER = '\r\n'
+    KEY_DOWN = "\x1b[B"
+    KEY_ENTER = "\r\n"
     img = os.path.basename(img_path)
 
     run("pkill -9 minicom")
@@ -64,15 +74,15 @@ def firmware_update(img_path):
     child.expect("Press 'B' within 10 seconds for boot menu", 30)
     time.sleep(1)
     print("Pressing B to access boot menu")
-    child.send('b')
+    child.send("b")
     print("waiting for instructions to Boot from Primary Boot Device")
     child.expect("1\) Boot from Primary Boot Device", 10)
     time.sleep(1)
-    child.send('1')
+    child.send("1")
     print("waiting to escape to uboot menu")
     child.expect("Hit any key to stop autoboot", 60)
     print("Sending escape 5 times")
-    child.send(ESC*5)
+    child.send(ESC * 5)
     print("waiting on uboot prompt")
     child.expect("crb106-pcie>", 5)
     print("enabling 100G management port")
@@ -114,11 +124,13 @@ def firmware_update(img_path):
     child.close()
     print("Closing minicom")
 
+
 def uboot_firmware_update(args):
     print("Starting FW Update")
     print("Resetting card")
     reset()
     firmware_update(args.img)
+
 
 def setup_tftp(img):
     print("Configuring TFTP")
@@ -129,17 +141,22 @@ def setup_tftp(img):
     children.append(p)
     shutil.copy(f"{img}", "/var/lib/tftpboot")
 
+
 def setup_dhcp(dev: str):
     print("Configuring DHCP")
     run(f"ip addr add 172.131.100.1/24 dev {dev}")
     shutil.copy(f"manifests/pxeboot/dhcpd.conf", "/etc/dhcp/dhcpd.conf")
     run("killall dhcpd")
-    p = run_process("/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd")
+    p = run_process(
+        "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
+    )
     children.append(p)
+
 
 def prepare_fwupdate(args):
     setup_dhcp(args.dev)
     setup_tftp(args.img)
+
 
 def try_fwupdate(args):
     print("Preparing services for FW update")
@@ -151,17 +168,18 @@ def try_fwupdate(args):
     for e in children:
         e.terminate()
 
+
 def kill_existing():
-    pids = [pid for pid in os.listdir('/proc') if pid.isdigit()]
+    pids = [pid for pid in os.listdir("/proc") if pid.isdigit()]
 
     own_pid = os.getpid()
     for pid in filter(lambda x: int(x) != own_pid, pids):
         try:
-            with open(os.path.join('/proc', pid, 'cmdline'), 'rb') as f:
+            with open(os.path.join("/proc", pid, "cmdline"), "rb") as f:
                 # print(f.read().decode("utf-8"))
-                zb = b'\x00'
+                zb = b"\x00"
                 cmd = [x.decode("utf-8") for x in f.read().strip(zb).split(zb)]
-                if ("python" in cmd[0] and os.path.basename(cmd[1]) == 'fwupdate.py'):
+                if "python" in cmd[0] and os.path.basename(cmd[1]) == "fwupdate.py":
                     print(f"Killing pid {pid}")
                     os.kill(int(pid), signal.SIGKILL)
         except Exception:
@@ -172,6 +190,7 @@ def main():
     args = parse_args()
     kill_existing()
     try_fwupdate(args)
+
 
 if __name__ == "__main__":
     main()

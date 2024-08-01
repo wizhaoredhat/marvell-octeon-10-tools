@@ -16,8 +16,17 @@ iso_mount_path = "/mnt/marvel_dpu_iso"
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Process ISO file.")
-    parser.add_argument("iso", type=str, help="Mandatory argument of type string for ISO file (make sure the path to this file was mounted when running the pod via -v /host/iso:/container/iso).")
-    parser.add_argument("--dev", type=str, default="eno4", help="Optional argument of type string for device. Default is 'eno4'.")
+    parser.add_argument(
+        "iso",
+        type=str,
+        help="Mandatory argument of type string for ISO file (make sure the path to this file was mounted when running the pod via -v /host/iso:/container/iso).",
+    )
+    parser.add_argument(
+        "--dev",
+        type=str,
+        default="eno4",
+        help="Optional argument of type string for device. Default is 'eno4'.",
+    )
 
     args = parser.parse_args()
     if not os.path.exists(args.iso):
@@ -25,6 +34,7 @@ def parse_args():
         raise Exception("Invalid path to iso provided")
 
     return args
+
 
 def run_process(cmd):
     p = Process(target=run, args=(cmd,))
@@ -60,11 +70,12 @@ def wait_for_boot():
         print("Failed to detect IP from Marvell card")
         raise e
 
+
 def select_pxe_entry():
     print("selecting pxe entry")
     ESC = "\x1b"
-    KEY_DOWN = '\x1b[B'
-    KEY_ENTER = '\r\n'
+    KEY_DOWN = "\x1b[B"
+    KEY_ENTER = "\r\n"
 
     run("pkill -9 minicom")
     print("spawn minicom")
@@ -74,17 +85,20 @@ def select_pxe_entry():
     child.expect("Press 'B' within 10 seconds for boot menu", 30)
     time.sleep(1)
     print("Pressing B to access boot menu")
-    child.send('b')
+    child.send("b")
     print("waiting for instructions to Boot from Secondary Boot Device")
     child.expect("2\) Boot from Secondary Boot Device", 10)
     time.sleep(1)
-    child.send('2')
+    child.send("2")
     print("waiting to escape to UEFI boot menu")
     child.expect("Press ESCAPE for boot options", 60)
     print("Sending escape 5 times")
-    child.send(ESC*5)
+    child.send(ESC * 5)
     print("waiting on language option")
-    child.expect("This is the option.*one adjusts to change.*the language for the.*current system", timeout=3)
+    child.expect(
+        "This is the option.*one adjusts to change.*the language for the.*current system",
+        timeout=3,
+    )
     print("pressing down")
     child.send(KEY_DOWN)
     time.sleep(1)
@@ -123,6 +137,7 @@ def select_pxe_entry():
     child.close()
     print("Closing minicom")
 
+
 def uefi_pxe_boot():
     print("Starting UEFI PXE Boot")
     print("Resetting card")
@@ -130,12 +145,14 @@ def uefi_pxe_boot():
     select_pxe_entry()
     wait_for_boot()
 
+
 def http_server():
     os.chdir("/www")
-    server_address = ('', 80)
+    server_address = ("", 80)
     handler = http.server.SimpleHTTPRequestHandler
     httpd = http.server.HTTPServer(server_address, handler)
     httpd.serve_forever()
+
 
 def setup_http():
     os.makedirs("/www", exist_ok=True)
@@ -146,6 +163,7 @@ def setup_http():
     p.start()
     children.append(p)
 
+
 def setup_tftp():
     print("Configuring TFTP")
     os.makedirs("/var/lib/tftpboot/pxelinux", exist_ok=True)
@@ -153,30 +171,40 @@ def setup_tftp():
     run("killall in.tftpd")
     p = run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     children.append(p)
-    shutil.copy(f"{iso_mount_path}/images/pxeboot/vmlinuz", "/var/lib/tftpboot/pxelinux")
-    shutil.copy(f"{iso_mount_path}/images/pxeboot/initrd.img", "/var/lib/tftpboot/pxelinux")
+    shutil.copy(
+        f"{iso_mount_path}/images/pxeboot/vmlinuz", "/var/lib/tftpboot/pxelinux"
+    )
+    shutil.copy(
+        f"{iso_mount_path}/images/pxeboot/initrd.img", "/var/lib/tftpboot/pxelinux"
+    )
     shutil.copy(f"{iso_mount_path}/EFI/BOOT/grubaa64.efi", "/var/lib/tftpboot/")
     os.chmod("/var/lib/tftpboot/grubaa64.efi", 0o744)
     shutil.copy(f"manifests/pxeboot/grub.cfg", "/var/lib/tftpboot/grub.cfg")
+
 
 def setup_dhcp(dev: str):
     print("Configuring DHCP")
     run(f"ip addr add 172.131.100.1/24 dev {dev}")
     shutil.copy(f"manifests/pxeboot/dhcpd.conf", "/etc/dhcp/dhcpd.conf")
     run("killall dhcpd")
-    p = run_process("/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd")
+    p = run_process(
+        "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
+    )
     children.append(p)
+
 
 def mount_iso(iso):
     os.makedirs(iso_mount_path, exist_ok=True)
     run(f"umount {iso_mount_path}")
     run(f"mount -t iso9660 -o loop {iso} {iso_mount_path}")
 
+
 def prepare_pxeboot(args):
     setup_dhcp(args.dev)
     mount_iso(args.iso)
     setup_tftp()
     setup_http()
+
 
 def try_pxeboot(args):
     print("Preparing services for Pxeboot")
@@ -188,17 +216,18 @@ def try_pxeboot(args):
     for e in children:
         e.terminate()
 
+
 def kill_existing():
-    pids = [pid for pid in os.listdir('/proc') if pid.isdigit()]
+    pids = [pid for pid in os.listdir("/proc") if pid.isdigit()]
 
     own_pid = os.getpid()
     for pid in filter(lambda x: int(x) != own_pid, pids):
         try:
-            with open(os.path.join('/proc', pid, 'cmdline'), 'rb') as f:
+            with open(os.path.join("/proc", pid, "cmdline"), "rb") as f:
                 # print(f.read().decode("utf-8"))
-                zb = b'\x00'
+                zb = b"\x00"
                 cmd = [x.decode("utf-8") for x in f.read().strip(zb).split(zb)]
-                if ("python" in cmd[0] and os.path.basename(cmd[1]) == 'pxeboot.py'):
+                if "python" in cmd[0] and os.path.basename(cmd[1]) == "pxeboot.py":
                     print(f"Killing pid {pid}")
                     os.kill(int(pid), signal.SIGKILL)
         except Exception:
@@ -209,6 +238,7 @@ def main():
     args = parse_args()
     kill_existing()
     try_pxeboot(args)
+
 
 if __name__ == "__main__":
     main()
