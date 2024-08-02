@@ -5,6 +5,7 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
     dnf install -y epel-next-release epel-release && \
     dnf install \
         dhcp-server \
+        ethtool \
         iproute \
         iputils \
         minicom \
@@ -17,6 +18,7 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         tftp \
         tftp-server \
         tini \
+        vim \
         -y
 
 COPY * /
