@@ -49,6 +49,12 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help='Specify SSH public keys to add to the DPU\'s /root/.ssh/authorized_keys. Can be specified multiple times. If unspecified or set to "", include "/{host-path}/root/.ssh/id_ed25519.pub" (this file will be generated if it doesn\'t exist).',
     )
+    parser.add_argument(
+        "--yum-repos",
+        choices=["none", "rhel-nightly"],
+        default="none",
+        help='We generate "/etc/yum.repos.d/marvell-tools-beaker.repo" with latest RHEL9 nightly compose. However, that repo is disabled unless "--yum-repos=rhel-nightly".',
+    )
 
     args = parser.parse_args()
     if not os.path.exists(args.iso):
@@ -177,7 +183,7 @@ def http_server() -> None:
     httpd.serve_forever()
 
 
-def copy_kickstart(host_path: str, ssh_pubkey: list[str]) -> None:
+def copy_kickstart(host_path: str, ssh_pubkey: list[str], yum_repos: str) -> None:
     with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
         kickstart = f.read()
 
@@ -186,6 +192,7 @@ def copy_kickstart(host_path: str, ssh_pubkey: list[str]) -> None:
     )
     kickstart = kickstart.replace("@__DPU_IP4ADDRNET__@", common_dpu.dpu_ip4addrnet)
     kickstart = kickstart.replace("@__HOST_IP4ADDR__@", common_dpu.host_ip4addr)
+    kickstart = kickstart.replace("@__YUM_REPOS__@", shlex.quote(yum_repos))
 
     res = host.local.run(
         [
@@ -203,11 +210,11 @@ def copy_kickstart(host_path: str, ssh_pubkey: list[str]) -> None:
         f.write(kickstart)
 
 
-def setup_http(host_path: str, ssh_pubkey: list[str]) -> None:
+def setup_http(host_path: str, ssh_pubkey: list[str], yum_repos: str) -> None:
     os.makedirs("/www", exist_ok=True)
     run(f"ln -s {iso_mount_path} /www")
 
-    copy_kickstart(host_path, ssh_pubkey)
+    copy_kickstart(host_path, ssh_pubkey, yum_repos)
 
     p = Process(target=http_server)
     p.start()
@@ -284,7 +291,7 @@ def prepare_pxeboot(args: argparse.Namespace) -> None:
     setup_dhcp()
     mount_iso(args.iso)
     setup_tftp()
-    setup_http(args.host_path, ssh_pubkey)
+    setup_http(args.host_path, ssh_pubkey, args.yum_repos)
 
 
 def try_pxeboot(args: argparse.Namespace) -> None:

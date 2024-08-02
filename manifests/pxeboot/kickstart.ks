@@ -121,4 +121,42 @@ cat <<EOF >> /etc/chrony.conf
 @__CHRONY_SERVERS__@
 EOF
 
+################################################################################
+
+YUM_REPOS=@__YUM_REPOS__@
+
+URL=
+YUM_REPO_ENABLED=0
+
+OS_VERSION="$(sed -n 's/^VERSION_ID="\(.*\)"$/\1/p' /etc/os-release)"
+URL_BASE='http://download.hosts.prod.upshift.rdu2.redhat.com/rhel-9/composes/RHEL-9/'
+URL_PART=$(curl -s "$URL_BASE" | sed -n 's/.*href="\(RHEL-'"$OS_VERSION"'.0-updates[^"]*\)".*/\1/p' | grep -v delete-me/ | sort | tail -n1)
+if [ -n "$URL_PART" ] ; then
+    URL="$URL_BASE$URL_PART"
+    if [ "$YUM_REPOS" = "rhel-nightly" ] ; then
+        YUM_REPO_ENABLED=1
+    fi
+fi
+
+if [ -n "$URL" ] ; then
+    cat <<EOF > /etc/yum.repos.d/marvell-tools-beaker.repo
+[beaker-BaseOS]
+name=beaker-BaseOS
+baseurl=${URL}compose/BaseOS/aarch64/os
+enabled=${YUM_REPO_ENABLED}
+gpgcheck=0
+skip_if_unavailable=1
+priority=200
+
+[beaker-AppStream]
+name=beaker-AppStream
+baseurl=${URL}compose/AppStream/aarch64/os
+enabled=${YUM_REPO_ENABLED}
+gpgcheck=0
+skip_if_unavailable=1
+priority=200
+EOF
+
+fi
+
 %end
