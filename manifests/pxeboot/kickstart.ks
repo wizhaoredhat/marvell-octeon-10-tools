@@ -70,4 +70,47 @@ if [ -n "$SSH_PUBKEY" ] ; then
     printf '%s\n' "$SSH_PUBKEY" >> /root/.ssh/authorized_keys
 fi
 
+################################################################################
+
+cat <<EOF > /etc/NetworkManager/system-connections/enP2p2s0-dpu-secondary.nmconnection
+[connection]
+id=enP2p2s0-dpu-secondary
+uuid=$(uuidgen)
+type=ethernet
+autoconnect-priority=20
+interface-name=enP2p2s0
+
+[ipv4]
+method=auto
+dhcp-timeout=2147483647
+route-metric=110
+
+[ipv6]
+method=auto
+addr-gen-mode=eui64
+route-metric=110
+EOF
+chmod 600 /etc/NetworkManager/system-connections/enP2p2s0-dpu-secondary.nmconnection
+
+cat <<EOF > /etc/NetworkManager/system-connections/enP2p3s0-dpu-host.nmconnection
+[connection]
+id=enP2p3s0-dpu-host
+uuid=$(uuidgen)
+type=ethernet
+autoconnect-priority=10
+interface-name=enP2p3s0
+
+[ipv4]
+method=auto
+address1=@__DPU_IP4ADDRNET__@,@__HOST_IP4ADDR__@
+dhcp-timeout=2147483647
+route-metric=120
+
+[ipv6]
+method=auto
+addr-gen-mode=eui64
+route-metric=120
+EOF
+chmod 600 /etc/NetworkManager/system-connections/enP2p3s0-dpu-host.nmconnection
+
 %end
