@@ -1,1 +1,4 @@
+PyYAML>=6.0.1
+paramiko
 pexpect
+pyserial
