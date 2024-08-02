@@ -78,3 +78,28 @@ def nmcli_setup_mngtiface(
             die_on_error=True,
         )
     host.local.run(f"{chroot_prefix}nmcli connection up {con_spec}", die_on_error=True)
+
+
+def ssh_generate_key(chroot_path: str) -> str:
+    file = f"{chroot_path}/root/.ssh/id_ed25519"
+    if not os.path.exists(file) or not os.path.exists(f"{file}.pub"):
+        try:
+            os.mkdir(os.path.dirname(file))
+        except FileExistsError:
+            pass
+        host.local.run(
+            f'ssh-keygen -t ed25519 -C marvell-tools@local.local -N "" -f {shlex.quote(file)}',
+            die_on_error=True,
+        )
+    return file
+
+
+def ssh_read_pubkey(ssh_privkey_file: str) -> str:
+    ssh_pubkey_file = f"{ssh_privkey_file}.pub"
+    with open(ssh_pubkey_file, "r") as f:
+        ssh_pubkey = f.read()
+    for s in ssh_pubkey.splitlines():
+        s = s.strip()
+        if s:
+            return s
+    raise RuntimeError('failure to read SSH public key from "{ssh_pubkey_file}"')
