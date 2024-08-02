@@ -180,6 +180,8 @@ def copy_kickstart(ssh_pubkey: str) -> None:
         kickstart = f.read()
 
     kickstart = kickstart.replace("@__SSH_PUBKEY__@", shlex.quote(ssh_pubkey))
+    kickstart = kickstart.replace("@__DPU_IP4ADDRNET__@", common_dpu.dpu_ip4addrnet)
+    kickstart = kickstart.replace("@__HOST_IP4ADDR__@", common_dpu.host_ip4addr)
 
     with open("/www/kickstart.ks", "w") as f:
         f.write(kickstart)
