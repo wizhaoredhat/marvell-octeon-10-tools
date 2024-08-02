@@ -121,4 +121,50 @@ cat <<EOF >> /etc/chrony.conf
 @__CHRONY_SERVERS__@
 EOF
 
+################################################################################
+
+cat <<'EOF_MARVELL_TOOLS_BEAKER' > /etc/yum.repos.d/marvell-tools-beaker.sh
+#!/bin/bash
+
+set -xe
+
+URL="$1"
+ENABLED="${2-1}"
+
+if [ -z "$URL" ] ; then
+    OS_VERSION="$(sed -n 's/^VERSION_ID="\(.*\)"$/\1/p' /etc/os-release | head -n1)"
+    URL_BASE='http://download.hosts.prod.upshift.rdu2.redhat.com/rhel-9/composes/RHEL-9/'
+    URL_PART=$(curl -s "$URL_BASE" | sed -n 's/.*href="\(RHEL-'"$OS_VERSION"'.0-updates[^"]*\)".*/\1/p' | grep -v delete-me/ | sort | tail -n1)
+    if [ -z "$URL_PART" -o -z "$OS_VERSION" ] ; then
+        exit 1
+    fi
+    URL="$URL_BASE$URL_PART"
+fi
+
+beaker_repo() {
+    local name="$1"
+cat <<EOF
+[beaker-$name]
+name=beaker-$name
+baseurl=${URL}compose/$name/aarch64/os
+enabled=${ENABLED}
+gpgcheck=0
+skip_if_unavailable=1
+priority=200
+
+EOF
+}
+
+(
+    beaker_repo BaseOS
+    beaker_repo AppStream
+) \
+    > /etc/yum.repos.d/marvell-tools-beaker.repo
+
+EOF_MARVELL_TOOLS_BEAKER
+
+chmod +x /etc/yum.repos.d/marvell-tools-beaker.sh
+
+/etc/yum.repos.d/marvell-tools-beaker.sh @__YUM_REPO_URL__@ @__YUM_REPO_ENABLED__@
+
 %end
