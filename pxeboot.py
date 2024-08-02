@@ -4,12 +4,14 @@ import argparse
 import http.server
 import os
 import pexpect
+import shlex
 import shutil
 import signal
 import time
 
 from collections.abc import Iterable
 from multiprocessing import Process
+from typing import Optional
 
 import common_dpu
 
@@ -39,6 +41,11 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="/host",
         help="Optional argument where the host filesystem is mounted. Default is '/host'. Run podman with \"-v /:/host\".",
+    )
+    parser.add_argument(
+        "--ssh-key",
+        nargs="+",
+        help='Specify SSH public keys to add to the DPU\'s /root/.ssh/authorized_keys. Can be specified multiple times. If unspecified or set to "", include "/{host-path}/root/.ssh/id_ed25519.pub" (this file will be generated if it doesn\'t exist).',
     )
 
     args = parser.parse_args()
@@ -168,10 +175,23 @@ def http_server() -> None:
     httpd.serve_forever()
 
 
-def setup_http() -> None:
+def copy_kickstart(ssh_pubkey: list[str]) -> None:
+    with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
+        kickstart = f.read()
+
+    kickstart = kickstart.replace(
+        "@__SSH_PUBKEY__@", shlex.quote("\n".join(ssh_pubkey))
+    )
+
+    with open("/www/kickstart.ks", "w") as f:
+        f.write(kickstart)
+
+
+def setup_http(ssh_pubkey: list[str]) -> None:
     os.makedirs("/www", exist_ok=True)
     run(f"ln -s {iso_mount_path} /www")
-    shutil.copy(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "/www/")
+
+    copy_kickstart(ssh_pubkey)
 
     p = Process(target=http_server)
     p.start()
@@ -199,12 +219,30 @@ def setup_tftp() -> None:
     )
 
 
-def prepare_host(dev: str, host_path: str) -> None:
+def prepare_host(dev: str, host_path: str, ssh_key: Optional[list[str]]) -> list[str]:
     common_dpu.nmcli_setup_mngtiface(
         ifname=dev,
         chroot_path=host_path,
         ip4addr=common_dpu.host_ip4addrnet,
     )
+
+    ssh_pubkey = []
+
+    add_host_key = True
+    if ssh_key:
+        add_host_key = False
+        for s in ssh_key:
+            if not s:
+                add_host_key = True
+            else:
+                ssh_pubkey.append(s)
+
+    if add_host_key:
+        ssh_privkey_file = common_dpu.ssh_generate_key(host_path)
+        if ssh_privkey_file is not None:
+            ssh_pubkey.append(common_dpu.ssh_read_pubkey(ssh_privkey_file))
+
+    return ssh_pubkey
 
 
 def setup_dhcp() -> None:
@@ -226,11 +264,11 @@ def mount_iso(iso: str) -> None:
 
 
 def prepare_pxeboot(args: argparse.Namespace) -> None:
-    prepare_host(args.dev, args.host_path)
+    ssh_pubkey = prepare_host(args.dev, args.host_path, args.ssh_key)
     setup_dhcp()
     mount_iso(args.iso)
     setup_tftp()
-    setup_http()
+    setup_http(ssh_pubkey)
 
 
 def try_pxeboot(args: argparse.Namespace) -> None:

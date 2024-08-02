@@ -53,3 +53,21 @@ grubby
 xterm
 NetworkManager-config-server
 %end
+
+################################################################################
+#
+################################################################################
+
+%post --log=/var/log/kickstart_post.log
+
+set -x
+
+SSH_PUBKEY=@__SSH_PUBKEY__@
+if [ -n "$SSH_PUBKEY" ] ; then
+    mkdir -p /root/.ssh
+    touch /root/.ssh/authorized_keys
+    chmod 600 /root/.ssh/authorized_keys
+    printf '%s\n' "$SSH_PUBKEY" >> /root/.ssh/authorized_keys
+fi
+
+%end
