@@ -13,6 +13,8 @@ from collections.abc import Iterable
 from multiprocessing import Process
 from typing import Optional
 
+from ktoolbox import host
+
 import common_dpu
 
 from common_dpu import run, minicom_cmd
@@ -175,7 +177,7 @@ def http_server() -> None:
     httpd.serve_forever()
 
 
-def copy_kickstart(ssh_pubkey: list[str]) -> None:
+def copy_kickstart(host_path: str, ssh_pubkey: list[str]) -> None:
     with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
         kickstart = f.read()
 
@@ -185,15 +187,27 @@ def copy_kickstart(ssh_pubkey: list[str]) -> None:
     kickstart = kickstart.replace("@__DPU_IP4ADDRNET__@", common_dpu.dpu_ip4addrnet)
     kickstart = kickstart.replace("@__HOST_IP4ADDR__@", common_dpu.host_ip4addr)
 
+    res = host.local.run(
+        [
+            "grep",
+            "-R",
+            "-h",
+            "^ *server ",
+            f"{host_path}/run/chrony-dhcp/",
+            f"{host_path}/etc/chrony.conf",
+        ]
+    )
+    kickstart = kickstart.replace("@__CHRONY_SERVERS__@", res.out)
+
     with open("/www/kickstart.ks", "w") as f:
         f.write(kickstart)
 
 
-def setup_http(ssh_pubkey: list[str]) -> None:
+def setup_http(host_path: str, ssh_pubkey: list[str]) -> None:
     os.makedirs("/www", exist_ok=True)
     run(f"ln -s {iso_mount_path} /www")
 
-    copy_kickstart(ssh_pubkey)
+    copy_kickstart(host_path, ssh_pubkey)
 
     p = Process(target=http_server)
     p.start()
@@ -270,7 +284,7 @@ def prepare_pxeboot(args: argparse.Namespace) -> None:
     setup_dhcp()
     mount_iso(args.iso)
     setup_tftp()
-    setup_http(ssh_pubkey)
+    setup_http(args.host_path, ssh_pubkey)
 
 
 def try_pxeboot(args: argparse.Namespace) -> None:

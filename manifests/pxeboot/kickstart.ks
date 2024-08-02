@@ -113,4 +113,12 @@ route-metric=120
 EOF
 chmod 600 /etc/NetworkManager/system-connections/enP2p3s0-dpu-host.nmconnection
 
+################################################################################
+
+cat <<EOF >> /etc/chrony.conf
+
+# Appended by marvell-tools
+@__CHRONY_SERVERS__@
+EOF
+
 %end
