@@ -9,16 +9,15 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         iputils \
         minicom \
         procps \
+        python-unversioned-command \
+        python3-pexpect \
         python3-pip \
+        python3-requests \
         python39 \
         tftp \
         tftp-server \
         tini \
-        -y && \
-    ln -s /usr/bin/python3.9 /usr/bin/python && \
-    pip3.9 install \
-        requests \
-        pexpect
+        -y
 
 COPY * /
 COPY manifests /manifests
