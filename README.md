@@ -25,9 +25,8 @@ Utilize the serial interface at /dev/ttyUSB0 to pxeboot the card with the provid
 Usage:
 ```
 IMAGE=quay.io/sdaniele/marvell-tools:latest
-sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev -v /root/RHEL-9.4.0-20240312.96-aarch64-dvd1.iso:/tmp/iso "$IMAGE"
-sudo podman exec -it marvell-tools /bin/bash
-python /marvell-octeon-10-tools/pxeboot.py --dev eno4 /tmp/iso
+sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -dit "$IMAGE"
+sudo podman exec -it marvell-tools python /marvell-octeon-10-tools/pxeboot.py --dev eno4 /host/root/RHEL-9.4.0-20240312.96-aarch64-dvd1.iso
 ```
 
 ### FW Updater
