@@ -34,6 +34,12 @@ def parse_args() -> argparse.Namespace:
         default="eno4",
         help="Optional argument of type string for device. Default is 'eno4'.",
     )
+    parser.add_argument(
+        "--host-path",
+        type=str,
+        default="/host",
+        help="Optional argument where the host filesystem is mounted. Default is '/host'. Run podman with \"-v /:/host\".",
+    )
 
     args = parser.parse_args()
     if not os.path.exists(args.iso):
@@ -193,9 +199,16 @@ def setup_tftp() -> None:
     )
 
 
-def setup_dhcp(dev: str) -> None:
+def prepare_host(dev: str, host_path: str) -> None:
+    common_dpu.nmcli_setup_mngtiface(
+        ifname=dev,
+        chroot_path=host_path,
+        ip4addr=common_dpu.host_ip4addrnet,
+    )
+
+
+def setup_dhcp() -> None:
     print("Configuring DHCP")
-    run(f"ip addr add 172.131.100.1/24 dev {dev}")
     shutil.copy(
         common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"), "/etc/dhcp/dhcpd.conf"
     )
@@ -213,7 +226,8 @@ def mount_iso(iso: str) -> None:
 
 
 def prepare_pxeboot(args: argparse.Namespace) -> None:
-    setup_dhcp(args.dev)
+    prepare_host(args.dev, args.host_path)
+    setup_dhcp()
     mount_iso(args.iso)
     setup_tftp()
     setup_http()
