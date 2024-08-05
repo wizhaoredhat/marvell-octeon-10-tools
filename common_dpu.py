@@ -1,20 +1,34 @@
-from collections import namedtuple
-import subprocess
 import os
 import shlex
+import subprocess
+import dataclasses
 
-def minicom_cmd(device):
-    return f'minicom -D {device}'
 
-def run(cmd: str, env: dict = os.environ.copy()):
+def minicom_cmd(device: str) -> str:
+    return f"minicom -D {device}"
+
+
+@dataclasses.dataclass(frozen=True)
+class Result:
+    out: str
+    err: str
+    returncode: int
+
+
+def run(cmd: str, env: dict[str, str] = os.environ.copy()) -> Result:
     print(f"running {cmd}")
-    Result = namedtuple("Result", "out err returncode")
     args = shlex.split(cmd)
-    pipe = subprocess.PIPE
-    with subprocess.Popen(args, stdout=pipe, stderr=pipe, env=env) as proc:
-        out = proc.stdout.read().decode("utf-8")
-        err = proc.stderr.read().decode("utf-8")
-        proc.communicate()
-        ret = proc.returncode
-    print(f"Result: {Result.out}\n{Result.err}\n{ret}\n")
-    return Result(out, err, ret)
+    res = subprocess.run(
+        args,
+        capture_output=True,
+        env=env,
+    )
+
+    result = Result(
+        out=res.stdout.decode("utf-8"),
+        err=res.stderr.decode("utf-8"),
+        returncode=res.returncode,
+    )
+
+    print(f"Result: {result.out}\n{result.err}\n{result.returncode}\n")
+    return result
