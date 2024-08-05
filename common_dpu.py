@@ -1,11 +1,13 @@
+import dataclasses
+import logging
 import os
 import shlex
 import subprocess
-import dataclasses
 
 from typing import Optional
 
 from ktoolbox import host
+from ktoolbox.logger import logger
 
 
 dpu_ip4addr = "172.131.100.100"
@@ -103,3 +105,48 @@ def ssh_read_pubkey(ssh_privkey_file: str) -> str:
         if s:
             return s
     raise RuntimeError('failure to read SSH public key from "{ssh_pubkey_file}"')
+
+
+def create_iso_file(iso: str, chroot_path: str) -> str:
+
+    iso0 = iso
+
+    if iso0.startswith("rhel:"):
+        rhel_version = iso0[len("rhel:") :]
+        if rhel_version == "":
+            # This is the default.
+            rhel_version = "9.4"
+        url = f"https://download.eng.bos.redhat.com/rhel-9/nightly/RHEL-9/latest-RHEL-{rhel_version}.0/compose/BaseOS/aarch64/iso/"
+        res = host.local.run(
+            f'curl -k -s {shlex.quote(url)} | sed -n \'s/.*href="\\(RHEL-[^"]\\+-dvd1.iso\\)".*/\\1/p\' | head -n1',
+            log_level_fail=logging.ERROR,
+        )
+        url_part = res.out.strip()
+        if not res.success or not url_part:
+            raise RuntimeError(
+                f'failure to detect URL for RHEL ISO image "{iso0}" at URL "{url}"'
+            )
+        iso1 = f"{url}{url_part}"
+    else:
+        iso1 = iso0
+
+    if iso1.startswith("http://") or iso1.startswith("https://"):
+        filename = iso1[(iso1.rfind("/") + 1) :]
+        iso2 = os.path.join(chroot_path, f"root/rhel-iso-{filename}")
+        if not os.path.exists(iso2):
+            ret = host.local.run(
+                f"curl -k -o {shlex.quote(iso2)} {shlex.quote(iso1)}",
+                log_level_fail=logging.ERROR,
+            )
+            if not ret.success:
+                raise RuntimeError(
+                    f'failure to download RHEL ISO image "{iso1}" to "{iso2}"'
+                )
+    else:
+        iso2 = iso1
+
+    if not os.path.exists(iso2):
+        raise RuntimeError(f'iso path "{iso}" ("{iso2}") does not exist')
+
+    logger.info(f"use iso {shlex.quote(iso2)}")
+    return iso2
