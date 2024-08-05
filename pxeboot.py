@@ -13,6 +13,7 @@ from collections.abc import Iterable
 from multiprocessing import Process
 from typing import Optional
 
+from ktoolbox import common
 from ktoolbox import host
 
 import common_dpu
@@ -164,12 +165,26 @@ def select_pxe_entry() -> None:
     print("Closing minicom")
 
 
-def uefi_pxe_boot() -> None:
+def write_hosts_entry(host_path: str) -> None:
+    common.etc_hosts_update_file(
+        {
+            "dpu": (common_dpu.dpu_ip4addr, None),
+        },
+        f"{host_path}/etc/hosts",
+    )
+
+
+def post_pxeboot(host_path: str) -> None:
+    write_hosts_entry(host_path)
+
+
+def uefi_pxe_boot(args: argparse.Namespace) -> None:
     print("Starting UEFI PXE Boot")
     print("Resetting card")
     reset()
     select_pxe_entry()
     wait_for_boot()
+    post_pxeboot(args.host_path)
 
 
 def http_server() -> None:
@@ -297,10 +312,11 @@ def try_pxeboot(args: argparse.Namespace) -> None:
     prepare_pxeboot(args)
     print("Giving services time to settle")
     time.sleep(10)
-    uefi_pxe_boot()
+    uefi_pxe_boot(args)
     print("Terminating http, tftp, and dhcpd")
     for e in children:
         e.terminate()
+    print("SUCCESS. Try `ssh root@dpu`")
 
 
 def kill_existing() -> None:
