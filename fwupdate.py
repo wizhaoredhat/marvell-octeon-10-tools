@@ -8,6 +8,8 @@ import time
 from collections.abc import Iterable
 from multiprocessing import Process
 
+import common_dpu
+
 from common_dpu import minicom_cmd
 from common_dpu import run
 from reset import reset
@@ -151,7 +153,10 @@ def setup_tftp(img: str) -> None:
 def setup_dhcp(dev: str) -> None:
     print("Configuring DHCP")
     run(f"ip addr add 172.131.100.1/24 dev {dev}")
-    shutil.copy("manifests/pxeboot/dhcpd.conf", "/etc/dhcp/dhcpd.conf")
+    shutil.copy(
+        common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"),
+        "/etc/dhcp/dhcpd.conf",
+    )
     run("killall dhcpd")
     p = run_process(
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
