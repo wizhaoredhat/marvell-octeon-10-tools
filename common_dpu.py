@@ -32,3 +32,7 @@ def run(cmd: str, env: dict[str, str] = os.environ.copy()) -> Result:
 
     print(f"Result: {result.out}\n{result.err}\n{result.returncode}\n")
     return result
+
+
+def packaged_file(relative_path: str) -> str:
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)

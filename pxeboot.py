@@ -9,6 +9,8 @@ import time
 from collections.abc import Iterable
 from multiprocessing import Process
 
+import common_dpu
+
 from common_dpu import run, minicom_cmd
 from reset import reset
 
@@ -161,7 +163,7 @@ def http_server() -> None:
 def setup_http() -> None:
     os.makedirs("/www", exist_ok=True)
     run(f"ln -s {iso_mount_path} /www")
-    shutil.copy("manifests/pxeboot/kickstart.ks", "/www/")
+    shutil.copy(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "/www/")
 
     p = Process(target=http_server)
     p.start()
@@ -183,13 +185,18 @@ def setup_tftp() -> None:
     )
     shutil.copy(f"{iso_mount_path}/EFI/BOOT/grubaa64.efi", "/var/lib/tftpboot/")
     os.chmod("/var/lib/tftpboot/grubaa64.efi", 0o744)
-    shutil.copy("manifests/pxeboot/grub.cfg", "/var/lib/tftpboot/grub.cfg")
+    shutil.copy(
+        common_dpu.packaged_file("manifests/pxeboot/grub.cfg"),
+        "/var/lib/tftpboot/grub.cfg",
+    )
 
 
 def setup_dhcp(dev: str) -> None:
     print("Configuring DHCP")
     run(f"ip addr add 172.131.100.1/24 dev {dev}")
-    shutil.copy("manifests/pxeboot/dhcpd.conf", "/etc/dhcp/dhcpd.conf")
+    shutil.copy(
+        common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"), "/etc/dhcp/dhcpd.conf"
+    )
     run("killall dhcpd")
     p = run_process(
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
