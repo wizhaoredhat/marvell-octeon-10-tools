@@ -19,12 +19,13 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         tftp-server \
         tini \
         vim \
-        -y
+        -y && \
+    echo "export PYTHONPATH=/marvell-octeon-10-tools" > /etc/profile.d/marvell-octeon-10-tools.sh
 
-COPY * /
-COPY manifests /manifests
+COPY ./*.py ./*sh /marvell-octeon-10-tools/
+COPY ./manifests /marvell-octeon-10-tools/manifests
 
-RUN mv /manifests/.minirc.dfl /root/
+COPY manifests/.minirc.dfl /root/
 
 ENTRYPOINT ["/usr/bin/tini", "-s", "-p", "SIGTERM", "-g", "-e", "143", "--"]
 CMD ["/usr/bin/sleep", "infinity"]

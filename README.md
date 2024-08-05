@@ -14,7 +14,7 @@ Utilize the serial interface at /dev/ttyUSB1 to trigger a reset of the associate
 
 Usage:
 ```
-python reset.py
+python /marvell-octeon-10-tools/reset.py
 ```
 
 ### PxeBoot
@@ -25,7 +25,7 @@ Usage:
 ```
 sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev -v /root/RHEL-9.4.0-20240312.96-aarch64-dvd1.iso:/tmp/iso quay.io/wizhao/marvell-tools
 sudo podman exec -it marvell-tools /bin/bash
-python pxeboot.py --dev eno4 /tmp/iso
+python /marvell-octeon-10-tools/pxeboot.py --dev eno4 /tmp/iso
 ```
 
 ### FW Updater
@@ -36,7 +36,7 @@ Usage:
 ```
 sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev -v /root/flash-uefi-cn10ka-11.24.02.img:/tmp/img quay.io/wizhao/marvell-tools
 sudo podman exec -it marvell-tools /bin/bash
-python fwupdate.py --dev eno4 /tmp/img
+python /marvell-octeon-10-tools/fwupdate.py --dev eno4 /tmp/img
 ```
 
 
