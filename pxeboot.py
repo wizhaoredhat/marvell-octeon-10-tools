@@ -30,7 +30,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "iso",
         type=str,
-        help="Mandatory argument of type string for ISO file (make sure the path to this file was mounted when running the pod via -v /host/iso:/container/iso).",
+        nargs="?",
+        default="rhel:9.4",
+        help='Select the RHEL ISO to install. This can be a file name (make sure to map the host with `-v /:/host` and specify the path name starting with "/host"); it can be a HTTP URL (in which case the file will be downloaded to /host/root/rhel-iso-$NAME if such file does not exist yet); it can also be "rhel:9.x" which will automatically detect the right HTTP URL to download the latest iso. Default: "rhel:" to choose a recent RHEL version',
     )
     parser.add_argument(
         "--dev",
@@ -56,12 +58,7 @@ def parse_args() -> argparse.Namespace:
         help='We generate "/etc/yum.repos.d/marvell-tools-beaker.repo" with latest RHEL9 nightly compose. However, that repo is disabled unless "--yum-repos=rhel-nightly".',
     )
 
-    args = parser.parse_args()
-    if not os.path.exists(args.iso):
-        print(f"Couldn't read iso file {args.iso}")
-        raise Exception("Invalid path to iso provided")
-
-    return args
+    return parser.parse_args()
 
 
 def run_process(cmd: str) -> Process:
@@ -285,16 +282,17 @@ def setup_dhcp() -> None:
     children.append(p)
 
 
-def mount_iso(iso: str) -> None:
+def mount_iso(iso_path: str) -> None:
     os.makedirs(iso_mount_path, exist_ok=True)
     run(f"umount {iso_mount_path}")
-    run(f"mount -t iso9660 -o loop {iso} {iso_mount_path}")
+    run(f"mount -t iso9660 -o loop {iso_path} {iso_mount_path}")
 
 
 def prepare_pxeboot(args: argparse.Namespace) -> None:
     ssh_pubkey = prepare_host(args.dev, args.host_path, args.ssh_key)
+    iso_path = common_dpu.create_iso_file(args.iso, chroot_path=args.host_path)
     setup_dhcp()
-    mount_iso(args.iso)
+    mount_iso(iso_path)
     setup_tftp()
     setup_http(args.host_path, ssh_pubkey, args.yum_repos)
 
