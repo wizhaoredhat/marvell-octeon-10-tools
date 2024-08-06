@@ -105,9 +105,11 @@ def nft_masquerade(ifname: str, subnet: str) -> None:
     )
 
 
-def ssh_generate_key(chroot_path: str) -> str:
+def ssh_generate_key(chroot_path: str, *, create: bool = True) -> Optional[str]:
     file = f"{chroot_path}/root/.ssh/id_ed25519"
     if not os.path.exists(file) or not os.path.exists(f"{file}.pub"):
+        if not create:
+            return None
         try:
             os.mkdir(os.path.dirname(file))
         except FileExistsError:

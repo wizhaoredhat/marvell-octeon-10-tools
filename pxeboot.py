@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ssh-key",
         nargs="+",
-        help='Specify SSH public keys to add to the DPU\'s /root/.ssh/authorized_keys. Can be specified multiple times. If unspecified or set to "", include "/{host-path}/root/.ssh/id_ed25519.pub" (this file will be generated if it doesn\'t exist).',
+        help='Specify SSH public keys to add to the DPU\'s /root/.ssh/authorized_keys. Can be specified multiple times. If unspecified or set to "", include "/{host-path}/root/.ssh/id_ed25519.pub" (this file will be generated with "--host-mode=rhel" if it doesn\'t exist).',
     )
     parser.add_argument(
         "--yum-repos",
@@ -61,8 +61,35 @@ def parse_args() -> argparse.Namespace:
         default="none",
         help='We generate "/etc/yum.repos.d/marvell-tools-beaker.repo" with latest RHEL9 nightly compose. However, that repo is disabled unless "--yum-repos=rhel-nightly".',
     )
+    parser.add_argument(
+        "--host-mode",
+        choices=["auto", "rhel", "coreos"],
+        default="auto",
+        help='How to treat the host. With "rhel" we configure a (persisted) NetworkManager connection profile for device (eno4). With "coreos", this only configures an ad-hoc IP address with iproute. Port forwarding is always ephemeral via nft rules.',
+    )
+    parser.add_argument(
+        "--host-setup-only",
+        action="store_true",
+        help="Installing the DPU also creates some ephemeral configuration. If you reboot the host, this is lost. Run the command with --host-setup-only to only recreate this configuration. This is idempotent.",
+    )
 
     return parser.parse_args()
+
+
+def detect_host_mode(host_path: str, host_mode: str) -> str:
+    if host_mode == "auto":
+        if host.local.run(
+            [
+                "grep",
+                "-q",
+                'NAME="Red Hat Enterprise Linux"',
+                f"{host_path}/etc/os-release",
+            ]
+        ).success:
+            host_mode = "rhel"
+        else:
+            host_mode = "coreos"
+    return host_mode
 
 
 def ping(hn: str) -> bool:
@@ -168,8 +195,9 @@ def write_hosts_entry(host_path: str) -> None:
     )
 
 
-def post_pxeboot(host_path: str) -> None:
-    write_hosts_entry(host_path)
+def post_pxeboot(host_mode: str, host_path: str) -> None:
+    if host_mode == "rhel":
+        write_hosts_entry(host_path)
 
 
 def copy_kickstart(host_path: str, ssh_pubkey: list[str], yum_repos: str) -> None:
@@ -238,12 +266,22 @@ def setup_tftp() -> None:
     )
 
 
-def prepare_host(dev: str, host_path: str, ssh_key: Optional[list[str]]) -> list[str]:
-    common_dpu.nmcli_setup_mngtiface(
-        ifname=dev,
-        chroot_path=host_path,
-        ip4addr=common_dpu.host_ip4addrnet,
-    )
+def prepare_host(
+    host_mode: str,
+    dev: str,
+    host_path: str,
+    ssh_key: Optional[list[str]],
+) -> list[str]:
+    if host_mode == "rhel":
+        common_dpu.nmcli_setup_mngtiface(
+            ifname=dev,
+            chroot_path=host_path,
+            ip4addr=common_dpu.host_ip4addrnet,
+        )
+    else:
+        host.local.run(
+            f"ip addr add {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(dev)}"
+        )
 
     common_dpu.nft_masquerade(ifname=dev, subnet=common_dpu.dpu_subnet)
     host.local.run("sysctl -w net.ipv4.ip_forward=1")
@@ -260,7 +298,10 @@ def prepare_host(dev: str, host_path: str, ssh_key: Optional[list[str]]) -> list
                 ssh_pubkey.append(s)
 
     if add_host_key:
-        ssh_privkey_file = common_dpu.ssh_generate_key(host_path)
+        ssh_privkey_file = common_dpu.ssh_generate_key(
+            host_path,
+            create=(host_mode == "rhel"),
+        )
         if ssh_privkey_file is not None:
             ssh_pubkey.append(common_dpu.ssh_read_pubkey(ssh_privkey_file))
 
@@ -287,25 +328,36 @@ def mount_iso(iso_path: str) -> None:
 
 def main() -> None:
     args = parse_args()
+    host_mode = detect_host_mode(args.host_path, args.host_mode)
     print("Preparing services for Pxeboot")
-    ssh_pubkey = prepare_host(args.dev, args.host_path, args.ssh_key)
-    iso_path = common_dpu.create_iso_file(args.iso, chroot_path=args.host_path)
-    setup_dhcp()
-    mount_iso(iso_path)
-    setup_tftp()
-    setup_http(args.host_path, ssh_pubkey, args.yum_repos)
-    print("Giving services time to settle")
-    time.sleep(10)
-    print("Starting UEFI PXE Boot")
-    print("Resetting card")
-    reset()
-    select_pxe_entry()
-    wait_for_boot()
-    post_pxeboot(args.host_path)
+    ssh_pubkey = prepare_host(host_mode, args.dev, args.host_path, args.ssh_key)
+
+    if not args.host_setup_only:
+        iso_path = common_dpu.create_iso_file(args.iso, chroot_path=args.host_path)
+        setup_dhcp()
+        mount_iso(iso_path)
+        setup_tftp()
+        setup_http(args.host_path, ssh_pubkey, args.yum_repos)
+        print("Giving services time to settle")
+        time.sleep(10)
+        print("Starting UEFI PXE Boot")
+        print("Resetting card")
+        reset()
+        select_pxe_entry()
+        wait_for_boot()
+
+    post_pxeboot(host_mode, args.host_path)
+
     print("Terminating http, tftp, and dhcpd")
     for e in children:
         e.terminate()
-    print("SUCCESS. Try `ssh root@dpu`")
+
+    if args.host_setup_only:
+        print("SUCCESS (host-setup-only). Try `ssh root@dpu`")
+    elif host_mode == "rhel":
+        print("SUCCESS. Try `ssh root@dpu`")
+    else:
+        print(f"SUCCESS. Try `ssh root@{common_dpu.dpu_ip4addr}`")
 
 
 if __name__ == "__main__":
