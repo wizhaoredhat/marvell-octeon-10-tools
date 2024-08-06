@@ -6,10 +6,12 @@ import subprocess
 
 from typing import Optional
 
+from ktoolbox import firewall
 from ktoolbox import host
 from ktoolbox.logger import logger
 
 
+dpu_subnet = "172.131.100.0/24"
 dpu_ip4addr = "172.131.100.100"
 dpu_ip4addrnet = f"{dpu_ip4addr}/24"
 host_ip4addr = "172.131.100.1"
@@ -80,6 +82,16 @@ def nmcli_setup_mngtiface(
             die_on_error=True,
         )
     host.local.run(f"{chroot_prefix}nmcli connection up {con_spec}", die_on_error=True)
+
+
+def nft_masquerade(ifname: str, subnet: str) -> None:
+    firewall.nft_call(
+        firewall.nft_data_masquerade_up(
+            table_name=f"marvell-tools-nat-{ifname}",
+            ifname=ifname,
+            subnet=subnet,
+        )
+    )
 
 
 def ssh_generate_key(chroot_path: str) -> str:

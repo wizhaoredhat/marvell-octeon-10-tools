@@ -259,6 +259,9 @@ def prepare_host(dev: str, host_path: str, ssh_key: str) -> str:
         ip4addr=common_dpu.host_ip4addrnet,
     )
 
+    common_dpu.nft_masquerade(ifname=dev, subnet=common_dpu.dpu_subnet)
+    host.local.run("sysctl -w net.ipv4.ip_forward=1")
+
     if ssh_key == "":
         ssh_privkey_file = common_dpu.ssh_generate_key(host_path)
         ssh_pubkey = common_dpu.ssh_read_pubkey(ssh_privkey_file)
