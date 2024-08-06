@@ -11,6 +11,7 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         iproute \
         iputils \
         minicom \
+        nftables \
         procps \
         python-unversioned-command \
         python3-pexpect \
