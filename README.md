@@ -2,7 +2,8 @@
 Marvell Octeon 10 Tools
 
 ```
-sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev quay.io/sdaniele/marvell-tools
+IMAGE=quay.io/sdaniele/marvell-tools:latest
+sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev "$IMAGE"
 sudo podman exec -it marvell-tools <cmd>
 ```
 
@@ -23,7 +24,8 @@ Utilize the serial interface at /dev/ttyUSB0 to pxeboot the card with the provid
 
 Usage:
 ```
-sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev -v /root/RHEL-9.4.0-20240312.96-aarch64-dvd1.iso:/tmp/iso quay.io/wizhao/marvell-tools
+IMAGE=quay.io/sdaniele/marvell-tools:latest
+sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev -v /root/RHEL-9.4.0-20240312.96-aarch64-dvd1.iso:/tmp/iso "$IMAGE"
 sudo podman exec -it marvell-tools /bin/bash
 python /marvell-octeon-10-tools/pxeboot.py --dev eno4 /tmp/iso
 ```
@@ -34,7 +36,8 @@ Utilize the serial interface at /dev/ttyUSB0 to update the card with the provide
 
 Usage:
 ```
-sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev -v /root/flash-uefi-cn10ka-11.24.02.img:/tmp/img quay.io/wizhao/marvell-tools
+IMAGE=quay.io/sdaniele/marvell-tools:latest
+sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev -v /root/flash-uefi-cn10ka-11.24.02.img:/tmp/img "$IMAGE"
 sudo podman exec -it marvell-tools /bin/bash
 python /marvell-octeon-10-tools/fwupdate.py --dev eno4 /tmp/img
 ```
