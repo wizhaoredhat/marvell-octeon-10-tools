@@ -4,7 +4,6 @@ import argparse
 import os
 import pexpect
 import shutil
-import signal
 import time
 
 from collections.abc import Iterable
@@ -182,26 +181,8 @@ def try_fwupdate(args: argparse.Namespace) -> None:
         e.terminate()
 
 
-def kill_existing() -> None:
-    pids = [pid for pid in os.listdir("/proc") if pid.isdigit()]
-
-    own_pid = os.getpid()
-    for pid in filter(lambda x: int(x) != own_pid, pids):
-        try:
-            with open(os.path.join("/proc", pid, "cmdline"), "rb") as f:
-                # print(f.read().decode("utf-8"))
-                zb = b"\x00"
-                cmd = [x.decode("utf-8") for x in f.read().strip(zb).split(zb)]
-                if "python" in cmd[0] and os.path.basename(cmd[1]) == "fwupdate.py":
-                    print(f"Killing pid {pid}")
-                    os.kill(int(pid), signal.SIGKILL)
-        except Exception:
-            pass
-
-
 def main() -> None:
     args = parse_args()
-    kill_existing()
     try_fwupdate(args)
 
 
