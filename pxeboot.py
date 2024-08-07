@@ -61,10 +61,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_process(cmd: str) -> Process:
-    p = Process(target=run, args=(cmd,))
-    p.start()
-    return p
+def ping(hn: str) -> bool:
+    ping_cmd = f"timeout 1 ping -4 -c 1 {hn}"
+    return run(ping_cmd).returncode == 0
 
 
 def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
@@ -79,11 +78,6 @@ def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
         time.sleep(5)
         end = time.time()
     raise Exception(f"No response after {round(end - begin, 2)}s")
-
-
-def ping(hn: str) -> bool:
-    ping_cmd = f"timeout 1 ping -4 -c 1 {hn}"
-    return run(ping_cmd).returncode == 0
 
 
 def wait_for_boot() -> None:
@@ -177,23 +171,6 @@ def post_pxeboot(host_path: str) -> None:
     write_hosts_entry(host_path)
 
 
-def uefi_pxe_boot(args: argparse.Namespace) -> None:
-    print("Starting UEFI PXE Boot")
-    print("Resetting card")
-    reset()
-    select_pxe_entry()
-    wait_for_boot()
-    post_pxeboot(args.host_path)
-
-
-def http_server() -> None:
-    os.chdir("/www")
-    server_address = ("", 80)
-    handler = http.server.SimpleHTTPRequestHandler
-    httpd = http.server.HTTPServer(server_address, handler)
-    httpd.serve_forever()
-
-
 def copy_kickstart(host_path: str, ssh_pubkey: list[str], yum_repos: str) -> None:
     with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
         kickstart = f.read()
@@ -232,6 +209,13 @@ def setup_http(host_path: str, ssh_pubkey: list[str], yum_repos: str) -> None:
 
     copy_kickstart(host_path, ssh_pubkey, yum_repos)
 
+    def http_server() -> None:
+        os.chdir("/www")
+        server_address = ("", 80)
+        handler = http.server.SimpleHTTPRequestHandler
+        httpd = http.server.HTTPServer(server_address, handler)
+        httpd.serve_forever()
+
     p = Process(target=http_server)
     p.start()
     children.append(p)
@@ -242,7 +226,7 @@ def setup_tftp() -> None:
     os.makedirs("/var/lib/tftpboot/pxelinux", exist_ok=True)
     print("starting in.tftpd")
     run("killall in.tftpd")
-    p = run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
+    p = common_dpu.run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     children.append(p)
     shutil.copy(
         f"{iso_mount_path}/images/pxeboot/vmlinuz", "/var/lib/tftpboot/pxelinux"
@@ -293,7 +277,7 @@ def setup_dhcp() -> None:
         common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"), "/etc/dhcp/dhcpd.conf"
     )
     run("killall dhcpd")
-    p = run_process(
+    p = common_dpu.run_process(
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
     )
     children.append(p)
@@ -305,30 +289,27 @@ def mount_iso(iso_path: str) -> None:
     run(f"mount -t iso9660 -o loop {iso_path} {iso_mount_path}")
 
 
-def prepare_pxeboot(args: argparse.Namespace) -> None:
+def main() -> None:
+    args = parse_args()
+    print("Preparing services for Pxeboot")
     ssh_pubkey = prepare_host(args.dev, args.host_path, args.ssh_key)
     iso_path = common_dpu.create_iso_file(args.iso, chroot_path=args.host_path)
     setup_dhcp()
     mount_iso(iso_path)
     setup_tftp()
     setup_http(args.host_path, ssh_pubkey, args.yum_repos)
-
-
-def try_pxeboot(args: argparse.Namespace) -> None:
-    print("Preparing services for Pxeboot")
-    prepare_pxeboot(args)
     print("Giving services time to settle")
     time.sleep(10)
-    uefi_pxe_boot(args)
+    print("Starting UEFI PXE Boot")
+    print("Resetting card")
+    reset()
+    select_pxe_entry()
+    wait_for_boot()
+    post_pxeboot(args.host_path)
     print("Terminating http, tftp, and dhcpd")
     for e in children:
         e.terminate()
     print("SUCCESS. Try `ssh root@dpu`")
-
-
-def main() -> None:
-    args = parse_args()
-    try_pxeboot(args)
 
 
 if __name__ == "__main__":
