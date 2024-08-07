@@ -17,7 +17,11 @@ from ktoolbox import host
 
 import common_dpu
 
-from common_dpu import run, minicom_cmd
+from common_dpu import ESC
+from common_dpu import KEY_DOWN
+from common_dpu import KEY_ENTER
+from common_dpu import minicom_cmd
+from common_dpu import run
 from reset import reset
 
 
@@ -93,9 +97,6 @@ def wait_for_boot() -> None:
 
 def select_pxe_entry() -> None:
     print("selecting pxe entry")
-    ESC = "\x1b"
-    KEY_DOWN = "\x1b[B"
-    KEY_ENTER = "\r\n"
 
     run("pkill -9 minicom")
     print("spawn minicom")

@@ -18,6 +18,10 @@ dpu_ip4addrnet = f"{dpu_ip4addr}/24"
 host_ip4addr = "172.131.100.1"
 host_ip4addrnet = f"{host_ip4addr}/24"
 
+ESC = "\x1b"
+KEY_DOWN = "\x1b[B"
+KEY_ENTER = "\r\n"
+
 
 def minicom_cmd(device: str) -> str:
     return f"minicom -D {device}"
