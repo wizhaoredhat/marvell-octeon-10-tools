@@ -3,6 +3,7 @@ FROM quay.io/centos/centos:stream9
 RUN dnf install -y 'dnf-command(config-manager)' && \
     dnf config-manager --set-enabled crb && \
     dnf install -y epel-next-release epel-release && \
+    dnf upgrade -y --skip-broken --allowerasing && \
     dnf install \
         dhcp-server \
         ethtool \
