@@ -22,7 +22,7 @@ skipx
 firstboot --disabled
 
 # Network information
-network --bootproto=dhcp --hostname=marvell-soc.redhat --device=enP2p6s0 --activate
+network --bootproto=dhcp --hostname=marvell-dpu.redhat --device=enP2p6s0 --activate
 
 ignoredisk --only-use=nvme0n1
 # System bootloader configuration
