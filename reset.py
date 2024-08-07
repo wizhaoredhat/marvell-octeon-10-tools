@@ -3,13 +3,9 @@
 import pexpect
 import time
 
+from common_dpu import KEY_ENTER
 from common_dpu import minicom_cmd
 from common_dpu import run
-
-
-ESC = "\x1b"
-KEY_DOWN = "\x1b[B"
-KEY_ENTER = "\r\n"
 
 
 def reset() -> None:

@@ -11,6 +11,8 @@ from multiprocessing import Process
 
 import common_dpu
 
+from common_dpu import ESC
+from common_dpu import KEY_ENTER
 from common_dpu import minicom_cmd
 from common_dpu import run
 from reset import reset
@@ -64,11 +66,6 @@ def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
 def ping(hn: str) -> bool:
     ping_cmd = f"timeout 1 ping -4 -c 1 {hn}"
     return run(ping_cmd).returncode == 0
-
-
-ESC = "\x1b"
-KEY_DOWN = "\x1b[B"
-KEY_ENTER = "\r\n"
 
 
 def firmware_update(img_path: str) -> None:
