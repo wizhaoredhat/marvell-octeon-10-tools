@@ -4,6 +4,7 @@ import os
 import shlex
 import subprocess
 
+from multiprocessing import Process
 from typing import Optional
 
 from ktoolbox import firewall
@@ -46,6 +47,12 @@ def run(cmd: str, env: dict[str, str] = os.environ.copy()) -> Result:
 
     print(f"Result: {result.out}\n{result.err}\n{result.returncode}\n")
     return result
+
+
+def run_process(cmd: str) -> Process:
+    p = Process(target=run, args=(cmd,))
+    p.start()
+    return p
 
 
 def packaged_file(relative_path: str) -> str:

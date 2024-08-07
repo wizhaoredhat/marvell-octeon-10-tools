@@ -134,13 +134,6 @@ def firmware_update(img_path: str) -> None:
     print("Closing minicom")
 
 
-def uboot_firmware_update(args: argparse.Namespace) -> None:
-    print("Starting FW Update")
-    print("Resetting card")
-    reset()
-    firmware_update(args.img)
-
-
 def setup_tftp(img: str) -> None:
     print("Configuring TFTP")
     os.makedirs("/var/lib/tftpboot", exist_ok=True)
@@ -165,25 +158,20 @@ def setup_dhcp(dev: str) -> None:
     children.append(p)
 
 
-def prepare_fwupdate(args: argparse.Namespace) -> None:
+def main() -> None:
+    args = parse_args()
+    print("Preparing services for FW update")
     setup_dhcp(args.dev)
     setup_tftp(args.img)
-
-
-def try_fwupdate(args: argparse.Namespace) -> None:
-    print("Preparing services for FW update")
-    prepare_fwupdate(args)
     print("Giving services time to settle")
     time.sleep(10)
-    uboot_firmware_update(args)
+    print("Starting FW Update")
+    print("Resetting card")
+    reset()
+    firmware_update(args.img)
     print("Terminating http, tftp, and dhcpd")
     for e in children:
         e.terminate()
-
-
-def main() -> None:
-    args = parse_args()
-    try_fwupdate(args)
 
 
 if __name__ == "__main__":
