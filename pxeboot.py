@@ -72,6 +72,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Installing the DPU also creates some ephemeral configuration. If you reboot the host, this is lost. Run the command with --host-setup-only to only recreate this configuration. This is idempotent.",
     )
+    parser.add_argument(
+        "--dpu-name",
+        type=str,
+        default="marvell-dpu",
+        help='The static hostname of the DPU. Defaults to "marvell-dpu". With "--host-mode=rhel" this is also added to /etc/hosts alongside "dpu".',
+    )
 
     return parser.parse_args()
 
@@ -186,24 +192,27 @@ def select_pxe_entry() -> None:
     print("Closing minicom")
 
 
-def write_hosts_entry(host_path: str) -> None:
+def write_hosts_entry(host_path: str, dpu_name: str) -> None:
     common.etc_hosts_update_file(
         {
-            "dpu": (common_dpu.dpu_ip4addr, None),
+            dpu_name: (common_dpu.dpu_ip4addr, ["dpu"]),
         },
         f"{host_path}/etc/hosts",
     )
 
 
-def post_pxeboot(host_mode: str, host_path: str) -> None:
+def post_pxeboot(host_mode: str, host_path: str, dpu_name: str) -> None:
     if host_mode == "rhel":
-        write_hosts_entry(host_path)
+        write_hosts_entry(host_path, dpu_name)
 
 
-def copy_kickstart(host_path: str, ssh_pubkey: list[str], yum_repos: str) -> None:
+def copy_kickstart(
+    host_path: str, dpu_name: str, ssh_pubkey: list[str], yum_repos: str
+) -> None:
     with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
         kickstart = f.read()
 
+    kickstart = kickstart.replace("@__FQDNNAME__@", shlex.quote(f"{dpu_name}.redhat"))
     kickstart = kickstart.replace(
         "@__SSH_PUBKEY__@", shlex.quote("\n".join(ssh_pubkey))
     )
@@ -227,11 +236,13 @@ def copy_kickstart(host_path: str, ssh_pubkey: list[str], yum_repos: str) -> Non
         f.write(kickstart)
 
 
-def setup_http(host_path: str, ssh_pubkey: list[str], yum_repos: str) -> None:
+def setup_http(
+    host_path: str, dpu_name: str, ssh_pubkey: list[str], yum_repos: str
+) -> None:
     os.makedirs("/www", exist_ok=True)
     run(f"ln -s {iso_mount_path} /www")
 
-    copy_kickstart(host_path, ssh_pubkey, yum_repos)
+    copy_kickstart(host_path, dpu_name, ssh_pubkey, yum_repos)
 
     def http_server() -> None:
         os.chdir("/www")
@@ -337,7 +348,7 @@ def main() -> None:
         setup_dhcp()
         mount_iso(iso_path)
         setup_tftp()
-        setup_http(args.host_path, ssh_pubkey, args.yum_repos)
+        setup_http(args.host_path, args.dpu_name, ssh_pubkey, args.yum_repos)
         print("Giving services time to settle")
         time.sleep(10)
         print("Starting UEFI PXE Boot")
@@ -346,7 +357,7 @@ def main() -> None:
         select_pxe_entry()
         wait_for_boot()
 
-    post_pxeboot(host_mode, args.host_path)
+    post_pxeboot(host_mode, args.host_path, args.dpu_name)
 
     print("Terminating http, tftp, and dhcpd")
     for e in children:
