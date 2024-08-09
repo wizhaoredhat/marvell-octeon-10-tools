@@ -22,7 +22,7 @@ skipx
 firstboot --disabled
 
 # Network information
-network --bootproto=dhcp --hostname=marvell-dpu.redhat --device=enP2p6s0 --activate
+network --bootproto=dhcp --hostname=@__FQDNNAME__@ --device=enP2p6s0 --activate
 
 ignoredisk --only-use=nvme0n1
 # System bootloader configuration
@@ -52,4 +52,107 @@ git
 grubby
 xterm
 NetworkManager-config-server
+%end
+
+################################################################################
+#
+################################################################################
+
+%post --log=/var/log/kickstart_post.log
+
+SSH_PUBKEY=@__SSH_PUBKEY__@
+if [ -n "$SSH_PUBKEY" ] ; then
+    mkdir -p /root/.ssh
+    touch /root/.ssh/authorized_keys
+    chmod 600 /root/.ssh/authorized_keys
+    printf '%s\n' "$SSH_PUBKEY" >> /root/.ssh/authorized_keys
+fi
+
+################################################################################
+
+cat <<EOF > /etc/NetworkManager/system-connections/enP2p2s0-dpu-secondary.nmconnection
+[connection]
+id=enP2p2s0-dpu-secondary
+uuid=$(uuidgen)
+type=ethernet
+autoconnect-priority=20
+interface-name=enP2p2s0
+
+[ipv4]
+method=auto
+dhcp-timeout=2147483647
+route-metric=110
+
+[ipv6]
+method=auto
+addr-gen-mode=eui64
+route-metric=110
+EOF
+chmod 600 /etc/NetworkManager/system-connections/enP2p2s0-dpu-secondary.nmconnection
+
+cat <<EOF > /etc/NetworkManager/system-connections/enP2p3s0-dpu-host.nmconnection
+[connection]
+id=enP2p3s0-dpu-host
+uuid=$(uuidgen)
+type=ethernet
+autoconnect-priority=10
+interface-name=enP2p3s0
+
+[ipv4]
+method=auto
+address1=@__DPU_IP4ADDRNET__@,@__HOST_IP4ADDR__@
+dhcp-timeout=2147483647
+route-metric=120
+
+[ipv6]
+method=auto
+addr-gen-mode=eui64
+route-metric=120
+EOF
+chmod 600 /etc/NetworkManager/system-connections/enP2p3s0-dpu-host.nmconnection
+
+################################################################################
+
+cat <<EOF >> /etc/chrony.conf
+
+# Appended by marvell-tools
+@__CHRONY_SERVERS__@
+EOF
+
+################################################################################
+
+YUM_REPOS=@__YUM_REPOS__@
+
+URL=
+YUM_REPO_ENABLED=0
+
+OS_VERSION="$(sed -n 's/^VERSION_ID="\(.*\)"$/\1/p' /etc/os-release)"
+URL_BASE='http://download.hosts.prod.upshift.rdu2.redhat.com/rhel-9/composes/RHEL-9/'
+URL_PART=$(curl -s "$URL_BASE" | sed -n 's/.*href="\(RHEL-'"$OS_VERSION"'.0-updates[^"]*\)".*/\1/p' | grep -v delete-me/ | sort | tail -n1)
+if [ -n "$URL_PART" ] ; then
+    URL="$URL_BASE$URL_PART"
+    if [ "$YUM_REPOS" = "rhel-nightly" ] ; then
+        YUM_REPO_ENABLED=1
+    fi
+fi
+
+if [ -n "$URL" ] ; then
+    cat <<EOF > /etc/yum.repos.d/marvell-tools-beaker.repo
+[beaker-BaseOS]
+name=beaker-BaseOS
+baseurl=${URL}compose/BaseOS/aarch64/os
+enabled=${YUM_REPO_ENABLED}
+gpgcheck=0
+skip_if_unavailable=1
+
+[beaker-AppStream]
+name=beaker-AppStream
+baseurl=${URL}compose/AppStream/aarch64/os
+enabled=${YUM_REPO_ENABLED}
+gpgcheck=0
+skip_if_unavailable=1
+EOF
+
+fi
+
 %end

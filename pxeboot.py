@@ -1,17 +1,26 @@
+#!/usr/bin/env python
+
 import argparse
 import http.server
 import os
 import pexpect
+import shlex
 import shutil
-import signal
 import time
 
 from collections.abc import Iterable
 from multiprocessing import Process
 
+from ktoolbox import common
+from ktoolbox import host
+
 import common_dpu
 
-from common_dpu import run, minicom_cmd
+from common_dpu import ESC
+from common_dpu import KEY_DOWN
+from common_dpu import KEY_ENTER
+from common_dpu import minicom_cmd
+from common_dpu import run
 from reset import reset
 
 
@@ -24,7 +33,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "iso",
         type=str,
-        help="Mandatory argument of type string for ISO file (make sure the path to this file was mounted when running the pod via -v /host/iso:/container/iso).",
+        nargs="?",
+        default="rhel:9.4",
+        help='Select the RHEL ISO to install. This can be a file name (make sure to map the host with `-v /:/host` and specify the path name starting with "/host"); it can be a HTTP URL (in which case the file will be downloaded to /host/root/rhel-iso-$NAME if such file does not exist yet); it can also be "rhel:9.x" which will automatically detect the right HTTP URL to download the latest iso. Default: "rhel:" to choose a recent RHEL version',
     )
     parser.add_argument(
         "--dev",
@@ -32,19 +43,64 @@ def parse_args() -> argparse.Namespace:
         default="eno4",
         help="Optional argument of type string for device. Default is 'eno4'.",
     )
+    parser.add_argument(
+        "--host-path",
+        type=str,
+        default="/host",
+        help="Optional argument where the host filesystem is mounted. Default is '/host'. Run podman with \"-v /:/host\".",
+    )
+    parser.add_argument(
+        "--ssh-key",
+        type=str,
+        default="",
+        help="If set, add this SSH public key to the DPU's /root/.ssh/authorized_keys. If set to \"none\", this is not done. If left empty (the default), it uses /{host-path}/root/.ssh/id_ed25519.pub (or creates a password-less key if that file doesn't exist).",
+    )
+    parser.add_argument(
+        "--yum-repos",
+        choices=["none", "rhel-nightly"],
+        default="none",
+        help='We generate "/etc/yum.repos.d/marvell-tools-beaker.repo" with latest RHEL9 nightly compose. However, that repo is disabled unless "--yum-repos=rhel-nightly".',
+    )
+    parser.add_argument(
+        "--host-mode",
+        choices=["auto", "rhel", "coreos"],
+        default="auto",
+        help='How to treat the host. With "rhel" we configure a (persisted) NetworkManager connection profile for device (eno4). With "coreos", this only configures an ad-hoc IP address with iproute. Port forwarding is always ephemeral via nft rules.',
+    )
+    parser.add_argument(
+        "--host-setup-only",
+        action="store_true",
+        help="Installing the DPU also creates some ephemeral configuration. If you reboot the host, this is lost. Run the command with --host-setup-only to only recreate this configuration. This is idempotent.",
+    )
+    parser.add_argument(
+        "--dpu-name",
+        type=str,
+        default="marvell-dpu",
+        help='The static hostname of the DPU. Defaults to "marvell-dpu". With "--host-mode=rhel" this is also added to /etc/hosts alongside "dpu".',
+    )
 
-    args = parser.parse_args()
-    if not os.path.exists(args.iso):
-        print(f"Couldn't read iso file {args.iso}")
-        raise Exception("Invalid path to iso provided")
-
-    return args
+    return parser.parse_args()
 
 
-def run_process(cmd: str) -> Process:
-    p = Process(target=run, args=(cmd,))
-    p.start()
-    return p
+def detect_host_mode(host_path: str, host_mode: str) -> str:
+    if host_mode == "auto":
+        if host.local.run(
+            [
+                "grep",
+                "-q",
+                'NAME="Red Hat Enterprise Linux"',
+                f"{host_path}/etc/os-release",
+            ]
+        ).success:
+            host_mode = "rhel"
+        else:
+            host_mode = "coreos"
+    return host_mode
+
+
+def ping(hn: str) -> bool:
+    ping_cmd = f"timeout 1 ping -4 -c 1 {hn}"
+    return run(ping_cmd).returncode == 0
 
 
 def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
@@ -61,11 +117,6 @@ def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
     raise Exception(f"No response after {round(end - begin, 2)}s")
 
 
-def ping(hn: str) -> bool:
-    ping_cmd = f"timeout 1 ping -4 -c 1 {hn}"
-    return run(ping_cmd).returncode == 0
-
-
 def wait_for_boot() -> None:
     time.sleep(1000)
     try:
@@ -79,9 +130,6 @@ def wait_for_boot() -> None:
 
 def select_pxe_entry() -> None:
     print("selecting pxe entry")
-    ESC = "\x1b"
-    KEY_DOWN = "\x1b[B"
-    KEY_ENTER = "\r\n"
 
     run("pkill -9 minicom")
     print("spawn minicom")
@@ -144,26 +192,60 @@ def select_pxe_entry() -> None:
     print("Closing minicom")
 
 
-def uefi_pxe_boot() -> None:
-    print("Starting UEFI PXE Boot")
-    print("Resetting card")
-    reset()
-    select_pxe_entry()
-    wait_for_boot()
+def write_hosts_entry(host_path: str, dpu_name: str) -> None:
+    common.etc_hosts_update_file(
+        {
+            dpu_name: (common_dpu.dpu_ip4addr, ["dpu"]),
+        },
+        f"{host_path}/etc/hosts",
+    )
 
 
-def http_server() -> None:
-    os.chdir("/www")
-    server_address = ("", 80)
-    handler = http.server.SimpleHTTPRequestHandler
-    httpd = http.server.HTTPServer(server_address, handler)
-    httpd.serve_forever()
+def post_pxeboot(host_mode: str, host_path: str, dpu_name: str) -> None:
+    if host_mode == "rhel":
+        write_hosts_entry(host_path, dpu_name)
 
 
-def setup_http() -> None:
+def copy_kickstart(
+    host_path: str, dpu_name: str, ssh_pubkey: str, yum_repos: str
+) -> None:
+    with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
+        kickstart = f.read()
+
+    kickstart = kickstart.replace("@__FQDNNAME__@", shlex.quote(f"{dpu_name}.redhat"))
+    kickstart = kickstart.replace("@__SSH_PUBKEY__@", shlex.quote(ssh_pubkey))
+    kickstart = kickstart.replace("@__DPU_IP4ADDRNET__@", common_dpu.dpu_ip4addrnet)
+    kickstart = kickstart.replace("@__HOST_IP4ADDR__@", common_dpu.host_ip4addr)
+    kickstart = kickstart.replace("@__YUM_REPOS__@", shlex.quote(yum_repos))
+
+    res = host.local.run(
+        [
+            "grep",
+            "-R",
+            "-h",
+            "^ *server ",
+            f"{host_path}/run/chrony-dhcp/",
+            f"{host_path}/etc/chrony.conf",
+        ]
+    )
+    kickstart = kickstart.replace("@__CHRONY_SERVERS__@", res.out)
+
+    with open("/www/kickstart.ks", "w") as f:
+        f.write(kickstart)
+
+
+def setup_http(host_path: str, dpu_name: str, ssh_pubkey: str, yum_repos: str) -> None:
     os.makedirs("/www", exist_ok=True)
     run(f"ln -s {iso_mount_path} /www")
-    shutil.copy(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "/www/")
+
+    copy_kickstart(host_path, dpu_name, ssh_pubkey, yum_repos)
+
+    def http_server() -> None:
+        os.chdir("/www")
+        server_address = ("", 80)
+        handler = http.server.SimpleHTTPRequestHandler
+        httpd = http.server.HTTPServer(server_address, handler)
+        httpd.serve_forever()
 
     p = Process(target=http_server)
     p.start()
@@ -175,7 +257,7 @@ def setup_tftp() -> None:
     os.makedirs("/var/lib/tftpboot/pxelinux", exist_ok=True)
     print("starting in.tftpd")
     run("killall in.tftpd")
-    p = run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
+    p = common_dpu.run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     children.append(p)
     shutil.copy(
         f"{iso_mount_path}/images/pxeboot/vmlinuz", "/var/lib/tftpboot/pxelinux"
@@ -191,64 +273,93 @@ def setup_tftp() -> None:
     )
 
 
-def setup_dhcp(dev: str) -> None:
+def prepare_host(
+    host_mode: str,
+    dev: str,
+    host_path: str,
+    ssh_key: str,
+) -> str:
+    if host_mode == "rhel":
+        common_dpu.nmcli_setup_mngtiface(
+            ifname=dev,
+            chroot_path=host_path,
+            ip4addr=common_dpu.host_ip4addrnet,
+        )
+    else:
+        host.local.run(
+            "ip addr add {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(dev)}"
+        )
+
+    common_dpu.nft_masquerade(ifname=dev, subnet=common_dpu.dpu_subnet)
+    host.local.run("sysctl -w net.ipv4.ip_forward=1")
+
+    if ssh_key == "":
+        ssh_privkey_file = common_dpu.ssh_generate_key(
+            host_path,
+            create=(host_mode == "rhel"),
+        )
+        if ssh_privkey_file is None:
+            ssh_pubkey = ""
+        else:
+            ssh_pubkey = common_dpu.ssh_read_pubkey(ssh_privkey_file)
+    elif ssh_key == "none":
+        ssh_pubkey = ""
+    else:
+        ssh_pubkey = ssh_key
+
+    return ssh_pubkey
+
+
+def setup_dhcp() -> None:
     print("Configuring DHCP")
-    run(f"ip addr add 172.131.100.1/24 dev {dev}")
     shutil.copy(
         common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"), "/etc/dhcp/dhcpd.conf"
     )
     run("killall dhcpd")
-    p = run_process(
+    p = common_dpu.run_process(
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
     )
     children.append(p)
 
 
-def mount_iso(iso: str) -> None:
+def mount_iso(iso_path: str) -> None:
     os.makedirs(iso_mount_path, exist_ok=True)
     run(f"umount {iso_mount_path}")
-    run(f"mount -t iso9660 -o loop {iso} {iso_mount_path}")
-
-
-def prepare_pxeboot(args: argparse.Namespace) -> None:
-    setup_dhcp(args.dev)
-    mount_iso(args.iso)
-    setup_tftp()
-    setup_http()
-
-
-def try_pxeboot(args: argparse.Namespace) -> None:
-    print("Preparing services for Pxeboot")
-    prepare_pxeboot(args)
-    print("Giving services time to settle")
-    time.sleep(10)
-    uefi_pxe_boot()
-    print("Terminating http, tftp, and dhcpd")
-    for e in children:
-        e.terminate()
-
-
-def kill_existing() -> None:
-    pids = [pid for pid in os.listdir("/proc") if pid.isdigit()]
-
-    own_pid = os.getpid()
-    for pid in filter(lambda x: int(x) != own_pid, pids):
-        try:
-            with open(os.path.join("/proc", pid, "cmdline"), "rb") as f:
-                # print(f.read().decode("utf-8"))
-                zb = b"\x00"
-                cmd = [x.decode("utf-8") for x in f.read().strip(zb).split(zb)]
-                if "python" in cmd[0] and os.path.basename(cmd[1]) == "pxeboot.py":
-                    print(f"Killing pid {pid}")
-                    os.kill(int(pid), signal.SIGKILL)
-        except Exception:
-            pass
+    run(f"mount -t iso9660 -o loop {iso_path} {iso_mount_path}")
 
 
 def main() -> None:
     args = parse_args()
-    kill_existing()
-    try_pxeboot(args)
+    host_mode = detect_host_mode(args.host_path, args.host_mode)
+    print("Preparing services for Pxeboot")
+    ssh_pubkey = prepare_host(host_mode, args.dev, args.host_path, args.ssh_key)
+
+    if not args.host_setup_only:
+        iso_path = common_dpu.create_iso_file(args.iso, chroot_path=args.host_path)
+        setup_dhcp()
+        mount_iso(iso_path)
+        setup_tftp()
+        setup_http(args.host_path, args.dpu_name, ssh_pubkey, args.yum_repos)
+        print("Giving services time to settle")
+        time.sleep(10)
+        print("Starting UEFI PXE Boot")
+        print("Resetting card")
+        reset()
+        select_pxe_entry()
+        wait_for_boot()
+
+    post_pxeboot(host_mode, args.host_path, args.dpu_name)
+
+    print("Terminating http, tftp, and dhcpd")
+    for e in children:
+        e.terminate()
+
+    if args.host_setup_only:
+        print("SUCCESS (host-setup-only). Try `ssh root@dpu`")
+    elif host_mode == "rhel":
+        print("SUCCESS. Try `ssh root@dpu`")
+    else:
+        print(f"SUCCESS. Try `ssh root@{common_dpu.dpu_ip4addr}`")
 
 
 if __name__ == "__main__":
