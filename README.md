@@ -3,8 +3,7 @@ Marvell Octeon 10 Tools
 
 ```
 IMAGE=quay.io/sdaniele/marvell-tools:latest
-sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev "$IMAGE"
-sudo podman exec -it marvell-tools <cmd>
+sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" <cmd>
 ```
 
 ## Tools
@@ -15,7 +14,9 @@ Utilize the serial interface at /dev/ttyUSB1 to trigger a reset of the associate
 
 Usage:
 ```
-python /marvell-octeon-10-tools/reset.py
+IMAGE=quay.io/sdaniele/marvell-tools:latest
+sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" \
+  ./reset.py
 ```
 
 ### PxeBoot
@@ -25,8 +26,8 @@ Utilize the serial interface at /dev/ttyUSB0 to pxeboot the card with the provid
 Usage:
 ```
 IMAGE=quay.io/sdaniele/marvell-tools:latest
-sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -dit "$IMAGE"
-sudo podman exec -it marvell-tools python /marvell-octeon-10-tools/pxeboot.py --dev eno4 /host/root/RHEL-9.4.0-20240312.96-aarch64-dvd1.iso
+sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" \
+  ./pxeboot.py --dev eno4 /host/root/RHEL-9.4.0-20240312.96-aarch64-dvd1.iso
 ```
 
 ### FW Updater
@@ -36,9 +37,8 @@ Utilize the serial interface at /dev/ttyUSB0 to update the card with the provide
 Usage:
 ```
 IMAGE=quay.io/sdaniele/marvell-tools:latest
-sudo podman run --pull always --replace --pid host --network host --user 0 --name marvell-tools -dit --privileged -v /dev:/dev -v /root/flash-uefi-cn10ka-11.24.02.img:/tmp/img "$IMAGE"
-sudo podman exec -it marvell-tools /bin/bash
-python /marvell-octeon-10-tools/fwupdate.py --dev eno4 /tmp/img
+sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" \
+  ./fwupdate.py --dev eno4 /host/root/flash-uefi-cn10ka-11.24.02.img
 ```
 
 
