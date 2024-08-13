@@ -2,18 +2,19 @@
 
 import argparse
 import os
-import pexpect
 import shutil
 import time
 
 from collections.abc import Iterable
 from multiprocessing import Process
 
+from ktoolbox import common
+from ktoolbox.logger import logger
+
 import common_dpu
 
 from common_dpu import ESC
 from common_dpu import KEY_ENTER
-from common_dpu import minicom_cmd
 from common_dpu import run
 from reset import reset
 
@@ -69,66 +70,61 @@ def ping(hn: str) -> bool:
 
 
 def firmware_update(img_path: str) -> None:
-    print("firmware updating")
     img = os.path.basename(img_path)
+    logger.info(f"firmware updating (image {repr(img)})")
 
-    run("pkill -9 minicom")
-    print("spawn minicom")
-    child = pexpect.spawn(minicom_cmd("/dev/ttyUSB0"))
-    child.maxread = 10000
-    print("waiting for instructions to access boot menu")
-    child.expect("Press 'B' within 10 seconds for boot menu", 30)
-    time.sleep(1)
-    print("Pressing B to access boot menu")
-    child.send("b")
-    print("waiting for instructions to Boot from Primary Boot Device")
-    child.expect("1\\) Boot from Primary Boot Device", 10)
-    time.sleep(1)
-    child.send("1")
-    print("waiting to escape to uboot menu")
-    child.expect("Hit any key to stop autoboot", 60)
-    print("Sending escape 5 times")
-    child.send(ESC * 5)
-    print("waiting on uboot prompt")
-    child.expect("crb106-pcie>", 5)
-    print("enabling 100G management port")
-    child.send("setenv ethact rvu_pf#1")
-    child.send(KEY_ENTER)
-    time.sleep(3)
-    print("saving environment")
-    child.send("saveenv")
-    child.send(KEY_ENTER)
-    child.expect("OK", 10)
-    time.sleep(3)
-    print("enabling dhcp")
-    child.send("dhcp")
-    child.send(KEY_ENTER)
-    child.expect("DHCP client bound to address", 30)
-    time.sleep(1)
-    print("set serverip")
-    child.send("setenv serverip 172.131.100.1")
-    child.send(KEY_ENTER)
-    time.sleep(1)
-    print("tftp the image")
-    child.send(f"tftpboot $loadaddr {img}")
-    child.send(KEY_ENTER)
-    child.expect("Bytes transferred", 100)
-    time.sleep(1)
-    print("set to secondary SPI flash")
-    child.send("sf probe 1:0")
-    child.send(KEY_ENTER)
-    child.expect("SF: Detected", 10)
-    time.sleep(1)
-    print("updating flash!")
-    child.send("sf update $fileaddr 0 $filesize")
-    child.send(KEY_ENTER)
-    child.expect("bytes written", 500)
-    time.sleep(1)
-    print("reseting")
-    child.send("reset")
-    child.send(KEY_ENTER)
-    child.close()
-    print("Closing minicom")
+    with common.Serial(common_dpu.TTYUSB0) as ser:
+        logger.info("waiting for instructions to access boot menu")
+        ser.expect("Press 'B' within 10 seconds for boot menu", 30)
+        time.sleep(1)
+        logger.info("Pressing B to access boot menu")
+        ser.send("b")
+        logger.info("waiting for instructions to Boot from Primary Boot Device")
+        ser.expect("1\\) Boot from Primary Boot Device", 10)
+        time.sleep(1)
+        ser.send("1")
+        logger.info("waiting to escape to uboot menu")
+        ser.expect("Hit any key to stop autoboot", 60)
+        logger.info("Sending escape 5 times")
+        ser.send(ESC * 5)
+        logger.info("waiting on uboot prompt")
+        ser.expect("crb106-pcie>", 5)
+        logger.info("enabling 100G management port")
+        ser.send("setenv ethact rvu_pf#1")
+        ser.send(KEY_ENTER)
+        time.sleep(3)
+        logger.info("saving environment")
+        ser.send("saveenv")
+        ser.send(KEY_ENTER)
+        ser.expect("OK", 10)
+        time.sleep(3)
+        logger.info("enabling dhcp")
+        ser.send("dhcp")
+        ser.send(KEY_ENTER)
+        ser.expect("DHCP client bound to address", 30)
+        time.sleep(1)
+        logger.info("set serverip")
+        ser.send("setenv serverip 172.131.100.1")
+        ser.send(KEY_ENTER)
+        time.sleep(1)
+        logger.info("tftp the image")
+        ser.send(f"tftpboot $loadaddr {img}")
+        ser.send(KEY_ENTER)
+        ser.expect("Bytes transferred", 100)
+        time.sleep(1)
+        logger.info("set to secondary SPI flash")
+        ser.send("sf probe 1:0")
+        ser.send(KEY_ENTER)
+        ser.expect("SF: Detected", 10)
+        time.sleep(1)
+        logger.info("updating flash!")
+        ser.send("sf update $fileaddr 0 $filesize")
+        ser.send(KEY_ENTER)
+        ser.expect("bytes written", 500)
+        time.sleep(1)
+        logger.info("reseting")
+        ser.send("reset")
+        ser.send(KEY_ENTER)
 
 
 def setup_tftp(img: str) -> None:
