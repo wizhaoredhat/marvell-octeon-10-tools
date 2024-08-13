@@ -3,7 +3,6 @@
 import argparse
 import http.server
 import os
-import pexpect
 import shlex
 import shutil
 import time
@@ -14,13 +13,13 @@ from typing import Optional
 
 from ktoolbox import common
 from ktoolbox import host
+from ktoolbox.logger import logger
 
 import common_dpu
 
 from common_dpu import ESC
 from common_dpu import KEY_DOWN
 from common_dpu import KEY_ENTER
-from common_dpu import minicom_cmd
 from common_dpu import run
 from reset import reset
 
@@ -135,67 +134,61 @@ def wait_for_boot() -> None:
 
 
 def select_pxe_entry() -> None:
-    print("selecting pxe entry")
+    logger.info("selecting pxe entry")
 
-    run("pkill -9 minicom")
-    print("spawn minicom")
-    child = pexpect.spawn(minicom_cmd("/dev/ttyUSB0"))
-    child.maxread = 10000
-    print("waiting for instructions to access boot menu")
-    child.expect("Press 'B' within 10 seconds for boot menu", 30)
-    time.sleep(1)
-    print("Pressing B to access boot menu")
-    child.send("b")
-    print("waiting for instructions to Boot from Secondary Boot Device")
-    child.expect("2\\) Boot from Secondary Boot Device", 10)
-    time.sleep(1)
-    child.send("2")
-    print("waiting to escape to UEFI boot menu")
-    child.expect("Press ESCAPE for boot options", 60)
-    print("Sending escape 5 times")
-    child.send(ESC * 5)
-    print("waiting on language option")
-    child.expect(
-        "This is the option.*one adjusts to change.*the language for the.*current system",
-        timeout=3,
-    )
-    print("pressing down")
-    child.send(KEY_DOWN)
-    time.sleep(1)
-    print("pressing down again")
-    child.send(KEY_DOWN)
-    print("waiting for Boot manager entry")
-    child.expect("This selection will.*take you to the Boot.*Manager", timeout=3)
-    child.send(KEY_ENTER)
-    child.expect("Device Path")
-    retry = 30
-    print(f"Trying up to {retry} times to find pxe boot interface")
-    while retry:
-        child.send(KEY_DOWN)
-        time.sleep(0.1)
-        try:
-            # TODO: FIXME: We need to read the port configuration.
-            # e.g. 80AA99887766 + number of lanes used in the SERDES
-            child.expect("UEFI PXEv4.*MAC:80AA99887767", timeout=1)
-            break
-        except Exception:
-            retry -= 1
-    if not retry:
-        e = Exception("Didn't find boot interface")
-        print(e)
-        raise e
-    else:
-        print(f"Found boot interface after {30 - retry} tries, sending enter")
-        child.send(KEY_ENTER)
-        time.sleep(10)
-        # Use the ^ and v keys to select which entry is highlighted.
-        # Press enter to boot the selected OS, `e' to edit the commands
-        # before booting or `c' for a command-line.
-        # time.sleep(1)
-        # timeout = 30
-
-    child.close()
-    print("Closing minicom")
+    with common.Serial(common_dpu.TTYUSB0) as ser:
+        logger.info("waiting for instructions to access boot menu")
+        ser.expect("Press 'B' within 10 seconds for boot menu", 30)
+        time.sleep(1)
+        logger.info("Pressing B to access boot menu")
+        ser.send("b")
+        logger.info("waiting for instructions to Boot from Secondary Boot Device")
+        ser.expect("2\\) Boot from Secondary Boot Device", 10)
+        time.sleep(1)
+        ser.send("2")
+        logger.info("waiting to escape to UEFI boot menu")
+        ser.expect("Press ESCAPE for boot options", 60)
+        logger.info("Sending escape 5 times")
+        ser.send(ESC * 5)
+        logger.info("waiting on language option")
+        ser.expect(
+            "This is the option.*one adjusts to change.*the language for the.*current system",
+            3,
+        )
+        logger.info("pressing down")
+        ser.send(KEY_DOWN)
+        time.sleep(1)
+        logger.info("pressing down again")
+        ser.send(KEY_DOWN)
+        logger.info("waiting for Boot manager entry")
+        ser.expect("This selection will.*take you to the Boot.*Manager", 3)
+        ser.send(KEY_ENTER)
+        ser.expect("Device Path")
+        retry = 30
+        logger.info(f"Trying up to {retry} times to find pxe boot interface")
+        while retry:
+            ser.send(KEY_DOWN)
+            time.sleep(0.1)
+            try:
+                # TODO: FIXME: We need to read the port configuration.
+                # e.g. 80AA99887766 + number of lanes used in the SERDES
+                ser.expect("UEFI PXEv4.*MAC:80AA99887767", 1)
+                break
+            except Exception:
+                retry -= 1
+        if not retry:
+            e = Exception("Didn't find boot interface")
+            logger.info(e)
+            raise e
+        else:
+            logger.info(f"Found boot interface after {30 - retry} tries, sending enter")
+            ser.send(KEY_ENTER)
+            time.sleep(10)
+            # Use the ^ and v keys to select which entry is highlighted.
+            # Press enter to boot the selected OS, `e' to edit the commands
+            # before booting or `c' for a command-line.
+            # time.sleep(1)
+            # timeout = 30
 
 
 def write_hosts_entry(host_path: str, dpu_name: str) -> None:

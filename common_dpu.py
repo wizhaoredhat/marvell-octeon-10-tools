@@ -21,10 +21,10 @@ host_ip4addrnet = f"{host_ip4addr}/24"
 ESC = "\x1b"
 KEY_DOWN = "\x1b[B"
 KEY_ENTER = "\r\n"
+KEY_CTRL_M = "\r"
 
-
-def minicom_cmd(device: str) -> str:
-    return f"minicom -D {device}"
+TTYUSB0 = "/dev/ttyUSB0"
+TTYUSB1 = "/dev/ttyUSB1"
 
 
 @dataclasses.dataclass(frozen=True)

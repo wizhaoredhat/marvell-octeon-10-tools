@@ -14,8 +14,8 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         nftables \
         procps \
         python-unversioned-command \
-        python3-pexpect \
         python3-pip \
+        python3-pyserial \
         python3-pyyaml \
         python3-requests \
         python3-types-pyyaml \

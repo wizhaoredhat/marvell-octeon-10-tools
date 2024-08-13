@@ -1,38 +1,44 @@
 #!/usr/bin/env python
 
-import pexpect
 import time
 
-from common_dpu import KEY_ENTER
-from common_dpu import minicom_cmd
-from common_dpu import run
+from ktoolbox.logger import logger
+from ktoolbox import common
+
+import common_dpu
+
+from common_dpu import KEY_CTRL_M
 
 
-def reset() -> None:
-    run("pkill -9 minicom")
-    print("spawn minicom")
-    child = pexpect.spawn(minicom_cmd("/dev/ttyUSB1"))
-    child.maxread = 10000
-    print("waiting for minicom startup menu")
-    child.expect("Welcome to minicom", timeout=3)
-    time.sleep(1)
-    print("pressing enter")
-    child.send(KEY_ENTER)
-    child.sendcontrol("m")
-    time.sleep(1)
-    print("Waiting on SCP Main Menu")
-    child.expect("SCP Main Menu", timeout=3)
-    child.sendline("m")
-    time.sleep(1)
-    child.sendcontrol("m")
-    time.sleep(1)
-    print("Waiting on SCP Management Menu")
-    child.expect("SCP Management Menu", timeout=3)
-    child.sendline("r")
-    time.sleep(1)
-    child.sendcontrol("m")
-    time.sleep(1)
-    child.close()
+def _reset(try_idx: int, retry_count: int) -> None:
+    logger.debug(f"serial: reset {common_dpu.TTYUSB1} (try {try_idx} of {retry_count})")
+    with common.Serial(common_dpu.TTYUSB1) as ser:
+        time.sleep(1)
+        ser.send(KEY_CTRL_M * 2)
+        ser.expect("SCP Main Menu")
+        ser.send("m" + KEY_CTRL_M)
+        ser.expect("SCP Management Menu")
+        ser.send("r" + KEY_CTRL_M, sleep=0.5)
+        buffer = ser.read_all()
+        logger.debug(
+            f"serial[{ser.port}]: reset complete (buffer content {repr(buffer)})"
+        )
+
+
+def reset(retry_count: int = 5) -> None:
+    try_idx = 0
+    while True:
+        try:
+            _reset(try_idx, retry_count)
+        except Exception as e:
+            logger.debug(f"serial: reset failed: {e}")
+            if try_idx + 1 == retry_count:
+                raise
+            try_idx += 1
+            logger.debug("serial: retry in 5 seconds")
+            time.sleep(5)
+            continue
+        return
 
 
 def main() -> None:
