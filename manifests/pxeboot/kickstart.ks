@@ -52,6 +52,7 @@ git
 grubby
 xterm
 NetworkManager-config-server
+podman
 %end
 
 ################################################################################
