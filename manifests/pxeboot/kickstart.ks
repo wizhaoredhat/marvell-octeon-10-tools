@@ -80,6 +80,9 @@ type=ethernet
 autoconnect-priority=20
 interface-name=enP2p2s0
 
+[ethernet]
+cloned-mac-address=@__NM_SECONDARY_CLONED_MAC_ADDRESS__@
+
 [ipv4]
 method=auto
 dhcp-timeout=2147483647

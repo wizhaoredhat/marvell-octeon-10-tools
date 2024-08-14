@@ -78,6 +78,12 @@ def parse_args() -> argparse.Namespace:
         default="marvell-dpu",
         help='The static hostname of the DPU. Defaults to "marvell-dpu". With "--host-mode=rhel" this is also added to /etc/hosts alongside "dpu".',
     )
+    parser.add_argument(
+        "--nm-secondary-cloned-mac-address",
+        type=str,
+        default="",
+        help='The MAC address to configure on the "enP2p2s0-dpu-secondary" profile.',
+    )
 
     return parser.parse_args()
 
@@ -207,7 +213,11 @@ def post_pxeboot(host_mode: str, host_path: str, dpu_name: str) -> None:
 
 
 def copy_kickstart(
-    host_path: str, dpu_name: str, ssh_pubkey: list[str], yum_repos: str
+    host_path: str,
+    dpu_name: str,
+    ssh_pubkey: list[str],
+    yum_repos: str,
+    nm_secondary_cloned_mac_address: str,
 ) -> None:
     with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
         kickstart = f.read()
@@ -220,6 +230,10 @@ def copy_kickstart(
     )
     kickstart = kickstart.replace("@__DPU_IP4ADDRNET__@", common_dpu.dpu_ip4addrnet)
     kickstart = kickstart.replace("@__HOST_IP4ADDR__@", common_dpu.host_ip4addr)
+    kickstart = kickstart.replace(
+        "@__NM_SECONDARY_CLONED_MAC_ADDRESS__@",
+        nm_secondary_cloned_mac_address,
+    )
     kickstart = kickstart.replace("@__YUM_REPO_URL__@", shlex.quote(""))
     kickstart = kickstart.replace(
         "@__YUM_REPO_ENABLED__@", shlex.quote("1" if yum_repo_enabled else "0")
@@ -242,12 +256,18 @@ def copy_kickstart(
 
 
 def setup_http(
-    host_path: str, dpu_name: str, ssh_pubkey: list[str], yum_repos: str
+    host_path: str,
+    dpu_name: str,
+    ssh_pubkey: list[str],
+    yum_repos: str,
+    nm_secondary_cloned_mac_address: str,
 ) -> None:
     os.makedirs("/www", exist_ok=True)
     run(f"ln -s {iso_mount_path} /www")
 
-    copy_kickstart(host_path, dpu_name, ssh_pubkey, yum_repos)
+    copy_kickstart(
+        host_path, dpu_name, ssh_pubkey, yum_repos, nm_secondary_cloned_mac_address
+    )
 
     def http_server() -> None:
         os.chdir("/www")
@@ -353,7 +373,13 @@ def main() -> None:
         setup_dhcp()
         mount_iso(iso_path)
         setup_tftp()
-        setup_http(args.host_path, args.dpu_name, ssh_pubkey, args.yum_repos)
+        setup_http(
+            args.host_path,
+            args.dpu_name,
+            ssh_pubkey,
+            args.yum_repos,
+            args.nm_secondary_cloned_mac_address,
+        )
         print("Giving services time to settle")
         time.sleep(10)
         print("Starting UEFI PXE Boot")
