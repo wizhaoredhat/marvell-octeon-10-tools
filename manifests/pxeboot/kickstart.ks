@@ -167,4 +167,9 @@ chmod +x /etc/yum.repos.d/marvell-tools-beaker.sh
 
 /etc/yum.repos.d/marvell-tools-beaker.sh @__YUM_REPO_URL__@ @__YUM_REPO_ENABLED__@
 
+################################################################################
+
+# Allow password login as root.
+sed -i 's/.*PermitRootLogin.*/# \0\nPermitRootLogin yes/' /etc/ssh/sshd_config
+
 %end
