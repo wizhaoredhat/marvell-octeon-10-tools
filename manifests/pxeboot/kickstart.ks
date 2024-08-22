@@ -88,6 +88,7 @@ cloned-mac-address=@__NM_SECONDARY_CLONED_MAC_ADDRESS__@
 method=auto
 dhcp-timeout=2147483647
 route-metric=110
+@__NM_SECONDARY_IP_ADDRESS__@
 
 [ipv6]
 method=auto

@@ -83,6 +83,18 @@ def parse_args() -> argparse.Namespace:
         default="",
         help='The MAC address to configure on the "enP2p2s0-dpu-secondary" profile.',
     )
+    parser.add_argument(
+        "--nm-secondary-ip-address",
+        type=str,
+        default="",
+        help='If set, configure a static ipv4.addresses on the profile "enP2p2s0-dpu-secondary". This should contain the subnet, for example "192.168.122.5/24".',
+    )
+    parser.add_argument(
+        "--nm-secondary-ip-gateway",
+        type=str,
+        default="",
+        help='If set, configure ipv4.gateway on the "enP2p2s0-dpu-secondary" (requires "--nm-secondary-ip-address"). This should be in the same subnet as the address.',
+    )
 
     return parser.parse_args()
 
@@ -211,7 +223,15 @@ def copy_kickstart(
     ssh_pubkey: list[str],
     yum_repos: str,
     nm_secondary_cloned_mac_address: str,
+    nm_secondary_ip_address: str,
+    nm_secondary_ip_gateway: str,
 ) -> None:
+    ip_address = ""
+    if nm_secondary_ip_address:
+        ip_address = f"address1={nm_secondary_ip_address}"
+        if nm_secondary_ip_gateway:
+            ip_address += f",{nm_secondary_ip_gateway}"
+
     with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
         kickstart = f.read()
 
@@ -224,6 +244,10 @@ def copy_kickstart(
     kickstart = kickstart.replace(
         "@__NM_SECONDARY_CLONED_MAC_ADDRESS__@",
         nm_secondary_cloned_mac_address,
+    )
+    kickstart = kickstart.replace(
+        "@__NM_SECONDARY_IP_ADDRESS__@",
+        ip_address,
     )
     kickstart = kickstart.replace("@__YUM_REPOS__@", shlex.quote(yum_repos))
 
@@ -249,12 +273,20 @@ def setup_http(
     ssh_pubkey: list[str],
     yum_repos: str,
     nm_secondary_cloned_mac_address: str,
+    nm_secondary_ip_address: str,
+    nm_secondary_ip_gateway: str,
 ) -> None:
     os.makedirs("/www", exist_ok=True)
     run(f"ln -s {iso_mount_path} /www")
 
     copy_kickstart(
-        host_path, dpu_name, ssh_pubkey, yum_repos, nm_secondary_cloned_mac_address
+        host_path,
+        dpu_name,
+        ssh_pubkey,
+        yum_repos,
+        nm_secondary_cloned_mac_address,
+        nm_secondary_ip_address,
+        nm_secondary_ip_gateway,
     )
 
     def http_server() -> None:
@@ -367,6 +399,8 @@ def main() -> None:
             ssh_pubkey,
             args.yum_repos,
             args.nm_secondary_cloned_mac_address,
+            args.nm_secondary_ip_address,
+            args.nm_secondary_ip_gateway,
         )
         print("Giving services time to settle")
         time.sleep(10)
