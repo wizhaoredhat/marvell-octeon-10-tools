@@ -296,7 +296,7 @@ def setup_http(
 
     def http_server() -> None:
         os.chdir("/www")
-        server_address = ("", 80)
+        server_address = (common_dpu.host_ip4addr, 80)
         handler = http.server.SimpleHTTPRequestHandler
         httpd = http.server.HTTPServer(server_address, handler)
         httpd.serve_forever()
