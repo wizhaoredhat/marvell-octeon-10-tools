@@ -217,6 +217,33 @@ def post_pxeboot(host_mode: str, host_path: str, dpu_name: str) -> None:
         write_hosts_entry(host_path, dpu_name)
 
 
+def detect_yum_repo_url() -> str:
+    res = host.local.run(
+        [
+            "sed",
+            "-n",
+            "s/^name=Red Hat Enterprise Linux \\([0-9]\\+\\.[0-9]\\+\\).0$/\\1/p",
+            f"{iso_mount_path}/media.repo",
+        ]
+    )
+    if res.success and res.out:
+        os_version = res.out.splitlines()[-1].strip()
+        url_base = (
+            "http://download.hosts.prod.upshift.rdu2.redhat.com/rhel-9/composes/RHEL-9/"
+        )
+        sed_pattern = f's/.*href="\\(RHEL-{os_version}.0-updates[^"]*\\)".*/\\1/p'
+        res = host.local.run(
+            f"curl -s {shlex.quote(url_base)} | "
+            f"sed -n {shlex.quote(sed_pattern)} | "
+            "grep -v delete-me/ | sort | tail -n1"
+        )
+        if res.success:
+            part = res.out.strip()
+            if part:
+                return f"{url_base}{part}"
+    return ""
+
+
 def copy_kickstart(
     host_path: str,
     dpu_name: str,
@@ -251,7 +278,9 @@ def copy_kickstart(
         "@__NM_SECONDARY_IP_ADDRESS__@",
         ip_address,
     )
-    kickstart = kickstart.replace("@__YUM_REPO_URL__@", shlex.quote(""))
+    kickstart = kickstart.replace(
+        "@__YUM_REPO_URL__@", shlex.quote(detect_yum_repo_url())
+    )
     kickstart = kickstart.replace(
         "@__YUM_REPO_ENABLED__@", shlex.quote("1" if yum_repo_enabled else "0")
     )
