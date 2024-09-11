@@ -28,5 +28,6 @@ COPY ./manifests /marvell-octeon-10-tools/manifests
 
 COPY manifests/.minirc.dfl /root/
 
+WORKDIR /marvell-octeon-10-tools
 ENTRYPOINT ["/usr/bin/tini", "-s", "-p", "SIGTERM", "-g", "-e", "143", "--"]
 CMD ["/usr/bin/sleep", "infinity"]
