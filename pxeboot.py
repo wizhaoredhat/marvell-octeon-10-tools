@@ -264,7 +264,7 @@ def copy_kickstart(
 
     yum_repo_enabled = yum_repos == "rhel-nightly"
 
-    kickstart = kickstart.replace("@__FQDNNAME__@", shlex.quote(f"{dpu_name}.redhat"))
+    kickstart = kickstart.replace("@__HOSTNAME__@", shlex.quote(dpu_name))
     kickstart = kickstart.replace(
         "@__SSH_PUBKEY__@", shlex.quote("\n".join(ssh_pubkey))
     )
