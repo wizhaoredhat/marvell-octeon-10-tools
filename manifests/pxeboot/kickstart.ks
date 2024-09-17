@@ -53,3 +53,118 @@ grubby
 xterm
 NetworkManager-config-server
 %end
+
+################################################################################
+#
+################################################################################
+
+%post --log=/var/log/kickstart_post.log
+
+set -x
+
+SSH_PUBKEY=@__SSH_PUBKEY__@
+if [ -n "$SSH_PUBKEY" ] ; then
+    mkdir -p /root/.ssh
+    touch /root/.ssh/authorized_keys
+    chmod 600 /root/.ssh/authorized_keys
+    printf '%s\n' "$SSH_PUBKEY" >> /root/.ssh/authorized_keys
+fi
+
+################################################################################
+
+cat <<EOF > /etc/NetworkManager/system-connections/enP2p2s0-dpu-secondary.nmconnection
+[connection]
+id=enP2p2s0-dpu-secondary
+uuid=$(uuidgen)
+type=ethernet
+autoconnect-priority=20
+interface-name=enP2p2s0
+
+[ipv4]
+method=auto
+dhcp-timeout=2147483647
+route-metric=110
+
+[ipv6]
+method=auto
+addr-gen-mode=eui64
+route-metric=110
+EOF
+chmod 600 /etc/NetworkManager/system-connections/enP2p2s0-dpu-secondary.nmconnection
+
+cat <<EOF > /etc/NetworkManager/system-connections/enP2p3s0-dpu-host.nmconnection
+[connection]
+id=enP2p3s0-dpu-host
+uuid=$(uuidgen)
+type=ethernet
+autoconnect-priority=10
+interface-name=enP2p3s0
+
+[ipv4]
+method=auto
+address1=@__DPU_IP4ADDRNET__@,@__HOST_IP4ADDR__@
+dhcp-timeout=2147483647
+route-metric=120
+
+[ipv6]
+method=auto
+addr-gen-mode=eui64
+route-metric=120
+EOF
+chmod 600 /etc/NetworkManager/system-connections/enP2p3s0-dpu-host.nmconnection
+
+################################################################################
+
+cat <<EOF >> /etc/chrony.conf
+
+# Appended by marvell-tools
+@__CHRONY_SERVERS__@
+EOF
+
+################################################################################
+
+cat <<'EOF_MARVELL_TOOLS_BEAKER' > /etc/yum.repos.d/marvell-tools-beaker.sh
+#!/bin/bash
+
+set -xe
+
+URL="$1"
+ENABLED="${2-1}"
+
+if [ -z "$URL" ] ; then
+    OS_VERSION="$(sed -n 's/^VERSION_ID="\(.*\)"$/\1/p' /etc/os-release | head -n1)"
+    URL_BASE='http://download.hosts.prod.upshift.rdu2.redhat.com/rhel-9/composes/RHEL-9/'
+    URL_PART=$(curl -s "$URL_BASE" | sed -n 's/.*href="\(RHEL-'"$OS_VERSION"'.0-updates[^"]*\)".*/\1/p' | grep -v delete-me/ | sort | tail -n1)
+    if [ -z "$URL_PART" -o -z "$OS_VERSION" ] ; then
+        exit 1
+    fi
+    URL="$URL_BASE$URL_PART"
+fi
+
+beaker_repo() {
+    local name="$1"
+cat <<EOF
+[beaker-$name]
+name=beaker-$name
+baseurl=${URL}compose/$name/aarch64/os
+enabled=${ENABLED}
+gpgcheck=0
+skip_if_unavailable=1
+priority=200
+
+EOF
+}
+
+(
+    beaker_repo BaseOS
+    beaker_repo AppStream
+) \
+    > /etc/yum.repos.d/marvell-tools-beaker.repo
+
+EOF_MARVELL_TOOLS_BEAKER
+
+chmod +x /etc/yum.repos.d/marvell-tools-beaker.sh
+
+/etc/yum.repos.d/marvell-tools-beaker.sh @__YUM_REPO_URL__@ @__YUM_REPO_ENABLED__@
+
+%end

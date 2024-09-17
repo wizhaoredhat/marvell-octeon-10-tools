@@ -27,7 +27,7 @@ Usage:
 ```
 IMAGE=quay.io/sdaniele/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" \
-  ./pxeboot.py --dev eno4 /host/root/RHEL-9.4.0-20240312.96-aarch64-dvd1.iso
+  ./pxeboot.py --help
 ```
 
 ### FW Updater

@@ -4,12 +4,16 @@ import argparse
 import http.server
 import os
 import pexpect
+import shlex
 import shutil
 import signal
 import time
 
 from collections.abc import Iterable
 from multiprocessing import Process
+from typing import Optional
+
+from ktoolbox import host
 
 import common_dpu
 
@@ -26,7 +30,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "iso",
         type=str,
-        help="Mandatory argument of type string for ISO file (make sure the path to this file was mounted when running the pod via -v /host/iso:/container/iso).",
+        nargs="?",
+        default="rhel:9.4",
+        help='Select the RHEL ISO to install. This can be a file name (make sure to map the host with `-v /:/host` and specify the path name starting with "/host"); it can be a HTTP URL (in which case the file will be downloaded to /host/root/rhel-iso-$NAME if such file does not exist yet); it can also be "rhel:9.x" which will automatically detect the right HTTP URL to download the latest iso. Default: "rhel:" to choose a recent RHEL version',
     )
     parser.add_argument(
         "--dev",
@@ -34,13 +40,25 @@ def parse_args() -> argparse.Namespace:
         default="eno4",
         help="Optional argument of type string for device. Default is 'eno4'.",
     )
+    parser.add_argument(
+        "--host-path",
+        type=str,
+        default="/host",
+        help="Optional argument where the host filesystem is mounted. Default is '/host'. Run podman with \"-v /:/host\".",
+    )
+    parser.add_argument(
+        "--ssh-key",
+        nargs="+",
+        help='Specify SSH public keys to add to the DPU\'s /root/.ssh/authorized_keys. Can be specified multiple times. If unspecified or set to "", include "/{host-path}/root/.ssh/id_ed25519.pub" (this file will be generated if it doesn\'t exist).',
+    )
+    parser.add_argument(
+        "--yum-repos",
+        choices=["none", "rhel-nightly"],
+        default="none",
+        help='We generate "/etc/yum.repos.d/marvell-tools-beaker.repo" with latest RHEL9 nightly compose. However, that repo is disabled unless "--yum-repos=rhel-nightly".',
+    )
 
-    args = parser.parse_args()
-    if not os.path.exists(args.iso):
-        print(f"Couldn't read iso file {args.iso}")
-        raise Exception("Invalid path to iso provided")
-
-    return args
+    return parser.parse_args()
 
 
 def run_process(cmd: str) -> Process:
@@ -162,10 +180,43 @@ def http_server() -> None:
     httpd.serve_forever()
 
 
-def setup_http() -> None:
+def copy_kickstart(host_path: str, ssh_pubkey: list[str], yum_repos: str) -> None:
+    with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
+        kickstart = f.read()
+
+    yum_repo_enabled = yum_repos == "rhel-nightly"
+
+    kickstart = kickstart.replace(
+        "@__SSH_PUBKEY__@", shlex.quote("\n".join(ssh_pubkey))
+    )
+    kickstart = kickstart.replace("@__DPU_IP4ADDRNET__@", common_dpu.dpu_ip4addrnet)
+    kickstart = kickstart.replace("@__HOST_IP4ADDR__@", common_dpu.host_ip4addr)
+    kickstart = kickstart.replace("@__YUM_REPO_URL__@", shlex.quote(""))
+    kickstart = kickstart.replace(
+        "@__YUM_REPO_ENABLED__@", shlex.quote("1" if yum_repo_enabled else "0")
+    )
+
+    res = host.local.run(
+        [
+            "grep",
+            "-R",
+            "-h",
+            "^ *server ",
+            f"{host_path}/run/chrony-dhcp/",
+            f"{host_path}/etc/chrony.conf",
+        ]
+    )
+    kickstart = kickstart.replace("@__CHRONY_SERVERS__@", res.out)
+
+    with open("/www/kickstart.ks", "w") as f:
+        f.write(kickstart)
+
+
+def setup_http(host_path: str, ssh_pubkey: list[str], yum_repos: str) -> None:
     os.makedirs("/www", exist_ok=True)
     run(f"ln -s {iso_mount_path} /www")
-    shutil.copy(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "/www/")
+
+    copy_kickstart(host_path, ssh_pubkey, yum_repos)
 
     p = Process(target=http_server)
     p.start()
@@ -193,9 +244,34 @@ def setup_tftp() -> None:
     )
 
 
-def setup_dhcp(dev: str) -> None:
+def prepare_host(dev: str, host_path: str, ssh_key: Optional[list[str]]) -> list[str]:
+    common_dpu.nmcli_setup_mngtiface(
+        ifname=dev,
+        chroot_path=host_path,
+        ip4addr=common_dpu.host_ip4addrnet,
+    )
+
+    ssh_pubkey = []
+
+    add_host_key = True
+    if ssh_key:
+        add_host_key = False
+        for s in ssh_key:
+            if not s:
+                add_host_key = True
+            else:
+                ssh_pubkey.append(s)
+
+    if add_host_key:
+        ssh_privkey_file = common_dpu.ssh_generate_key(host_path)
+        if ssh_privkey_file is not None:
+            ssh_pubkey.append(common_dpu.ssh_read_pubkey(ssh_privkey_file))
+
+    return ssh_pubkey
+
+
+def setup_dhcp() -> None:
     print("Configuring DHCP")
-    run(f"ip addr add 172.131.100.1/24 dev {dev}")
     shutil.copy(
         common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"), "/etc/dhcp/dhcpd.conf"
     )
@@ -206,17 +282,19 @@ def setup_dhcp(dev: str) -> None:
     children.append(p)
 
 
-def mount_iso(iso: str) -> None:
+def mount_iso(iso_path: str) -> None:
     os.makedirs(iso_mount_path, exist_ok=True)
     run(f"umount {iso_mount_path}")
-    run(f"mount -t iso9660 -o loop {iso} {iso_mount_path}")
+    run(f"mount -t iso9660 -o loop {iso_path} {iso_mount_path}")
 
 
 def prepare_pxeboot(args: argparse.Namespace) -> None:
-    setup_dhcp(args.dev)
-    mount_iso(args.iso)
+    ssh_pubkey = prepare_host(args.dev, args.host_path, args.ssh_key)
+    iso_path = common_dpu.create_iso_file(args.iso, chroot_path=args.host_path)
+    setup_dhcp()
+    mount_iso(iso_path)
     setup_tftp()
-    setup_http()
+    setup_http(args.host_path, ssh_pubkey, args.yum_repos)
 
 
 def try_pxeboot(args: argparse.Namespace) -> None:

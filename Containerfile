@@ -5,6 +5,7 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
     dnf install -y epel-next-release epel-release && \
     dnf upgrade -y --skip-broken --allowerasing && \
     dnf install \
+        /usr/bin/ssh-keygen \
         dhcp-server \
         ethtool \
         iproute \
