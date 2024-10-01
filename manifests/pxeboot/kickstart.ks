@@ -22,7 +22,7 @@ skipx
 firstboot --disabled
 
 # Network information
-network --bootproto=dhcp --hostname=marvell-dpu.redhat --device=enP2p6s0 --activate
+network --bootproto=dhcp --hostname=@__FQDNNAME__@ --device=enP2p6s0 --activate
 
 ignoredisk --only-use=nvme0n1
 # System bootloader configuration
@@ -79,6 +79,9 @@ uuid=$(uuidgen)
 type=ethernet
 autoconnect-priority=20
 interface-name=enP2p2s0
+
+[ethernet]
+cloned-mac-address=@__NM_SECONDARY_CLONED_MAC_ADDRESS__@
 
 [ipv4]
 method=auto
@@ -166,5 +169,10 @@ EOF_MARVELL_TOOLS_BEAKER
 chmod +x /etc/yum.repos.d/marvell-tools-beaker.sh
 
 /etc/yum.repos.d/marvell-tools-beaker.sh @__YUM_REPO_URL__@ @__YUM_REPO_ENABLED__@
+
+################################################################################
+
+# Allow password login as root.
+sed -i 's/.*PermitRootLogin.*/# \0\nPermitRootLogin yes/' /etc/ssh/sshd_config
 
 %end

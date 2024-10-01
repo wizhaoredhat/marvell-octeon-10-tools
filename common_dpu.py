@@ -4,16 +4,23 @@ import os
 import shlex
 import subprocess
 
+from multiprocessing import Process
 from typing import Optional
 
+from ktoolbox import firewall
 from ktoolbox import host
 from ktoolbox.logger import logger
 
 
+dpu_subnet = "172.131.100.0/24"
 dpu_ip4addr = "172.131.100.100"
 dpu_ip4addrnet = f"{dpu_ip4addr}/24"
 host_ip4addr = "172.131.100.1"
 host_ip4addrnet = f"{host_ip4addr}/24"
+
+ESC = "\x1b"
+KEY_DOWN = "\x1b[B"
+KEY_ENTER = "\r\n"
 
 
 def minicom_cmd(device: str) -> str:
@@ -44,6 +51,12 @@ def run(cmd: str, env: dict[str, str] = os.environ.copy()) -> Result:
 
     print(f"Result: {result.out}\n{result.err}\n{result.returncode}\n")
     return result
+
+
+def run_process(cmd: str) -> Process:
+    p = Process(target=run, args=(cmd,))
+    p.start()
+    return p
 
 
 def packaged_file(relative_path: str) -> str:
@@ -82,9 +95,21 @@ def nmcli_setup_mngtiface(
     host.local.run(f"{chroot_prefix}nmcli connection up {con_spec}", die_on_error=True)
 
 
-def ssh_generate_key(chroot_path: str) -> str:
+def nft_masquerade(ifname: str, subnet: str) -> None:
+    firewall.nft_call(
+        firewall.nft_data_masquerade_up(
+            table_name=f"marvell-tools-nat-{ifname}",
+            ifname=ifname,
+            subnet=subnet,
+        )
+    )
+
+
+def ssh_generate_key(chroot_path: str, *, create: bool = True) -> Optional[str]:
     file = f"{chroot_path}/root/.ssh/id_ed25519"
     if not os.path.exists(file) or not os.path.exists(f"{file}.pub"):
+        if not create:
+            return None
         try:
             os.mkdir(os.path.dirname(file))
         except FileExistsError:

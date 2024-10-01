@@ -4,7 +4,6 @@ import argparse
 import os
 import pexpect
 import shutil
-import signal
 import time
 
 from collections.abc import Iterable
@@ -12,6 +11,8 @@ from multiprocessing import Process
 
 import common_dpu
 
+from common_dpu import ESC
+from common_dpu import KEY_ENTER
 from common_dpu import minicom_cmd
 from common_dpu import run
 from reset import reset
@@ -65,11 +66,6 @@ def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
 def ping(hn: str) -> bool:
     ping_cmd = f"timeout 1 ping -4 -c 1 {hn}"
     return run(ping_cmd).returncode == 0
-
-
-ESC = "\x1b"
-KEY_DOWN = "\x1b[B"
-KEY_ENTER = "\r\n"
 
 
 def firmware_update(img_path: str) -> None:
@@ -135,13 +131,6 @@ def firmware_update(img_path: str) -> None:
     print("Closing minicom")
 
 
-def uboot_firmware_update(args: argparse.Namespace) -> None:
-    print("Starting FW Update")
-    print("Resetting card")
-    reset()
-    firmware_update(args.img)
-
-
 def setup_tftp(img: str) -> None:
     print("Configuring TFTP")
     os.makedirs("/var/lib/tftpboot", exist_ok=True)
@@ -166,43 +155,20 @@ def setup_dhcp(dev: str) -> None:
     children.append(p)
 
 
-def prepare_fwupdate(args: argparse.Namespace) -> None:
+def main() -> None:
+    args = parse_args()
+    print("Preparing services for FW update")
     setup_dhcp(args.dev)
     setup_tftp(args.img)
-
-
-def try_fwupdate(args: argparse.Namespace) -> None:
-    print("Preparing services for FW update")
-    prepare_fwupdate(args)
     print("Giving services time to settle")
     time.sleep(10)
-    uboot_firmware_update(args)
+    print("Starting FW Update")
+    print("Resetting card")
+    reset()
+    firmware_update(args.img)
     print("Terminating http, tftp, and dhcpd")
     for e in children:
         e.terminate()
-
-
-def kill_existing() -> None:
-    pids = [pid for pid in os.listdir("/proc") if pid.isdigit()]
-
-    own_pid = os.getpid()
-    for pid in filter(lambda x: int(x) != own_pid, pids):
-        try:
-            with open(os.path.join("/proc", pid, "cmdline"), "rb") as f:
-                # print(f.read().decode("utf-8"))
-                zb = b"\x00"
-                cmd = [x.decode("utf-8") for x in f.read().strip(zb).split(zb)]
-                if "python" in cmd[0] and os.path.basename(cmd[1]) == "fwupdate.py":
-                    print(f"Killing pid {pid}")
-                    os.kill(int(pid), signal.SIGKILL)
-        except Exception:
-            pass
-
-
-def main() -> None:
-    args = parse_args()
-    kill_existing()
-    try_fwupdate(args)
 
 
 if __name__ == "__main__":
