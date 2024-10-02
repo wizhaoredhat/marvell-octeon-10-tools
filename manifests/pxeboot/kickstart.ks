@@ -22,7 +22,7 @@ skipx
 firstboot --disabled
 
 # Network information
-network --bootproto=dhcp --hostname=@__FQDNNAME__@ --device=enP2p6s0 --activate
+network --bootproto=dhcp --hostname=@__HOSTNAME__@ --device=enP2p6s0 --activate
 
 ignoredisk --only-use=nvme0n1
 # System bootloader configuration
@@ -52,6 +52,7 @@ git
 grubby
 xterm
 NetworkManager-config-server
+podman
 %end
 
 ################################################################################
@@ -87,6 +88,7 @@ cloned-mac-address=@__NM_SECONDARY_CLONED_MAC_ADDRESS__@
 method=auto
 dhcp-timeout=2147483647
 route-metric=110
+@__NM_SECONDARY_IP_ADDRESS__@
 
 [ipv6]
 method=auto

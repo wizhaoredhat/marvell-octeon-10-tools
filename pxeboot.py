@@ -3,7 +3,6 @@
 import argparse
 import http.server
 import os
-import pexpect
 import shlex
 import shutil
 import time
@@ -14,13 +13,13 @@ from typing import Optional
 
 from ktoolbox import common
 from ktoolbox import host
+from ktoolbox.logger import logger
 
 import common_dpu
 
 from common_dpu import ESC
 from common_dpu import KEY_DOWN
 from common_dpu import KEY_ENTER
-from common_dpu import minicom_cmd
 from common_dpu import run
 from reset import reset
 
@@ -84,6 +83,18 @@ def parse_args() -> argparse.Namespace:
         default="",
         help='The MAC address to configure on the "enP2p2s0-dpu-secondary" profile.',
     )
+    parser.add_argument(
+        "--nm-secondary-ip-address",
+        type=str,
+        default="",
+        help='If set, configure a static ipv4.addresses on the profile "enP2p2s0-dpu-secondary". This should contain the subnet, for example "192.168.122.5/24".',
+    )
+    parser.add_argument(
+        "--nm-secondary-ip-gateway",
+        type=str,
+        default="",
+        help='If set, configure ipv4.gateway on the "enP2p2s0-dpu-secondary" (requires "--nm-secondary-ip-address"). This should be in the same subnet as the address.',
+    )
 
     return parser.parse_args()
 
@@ -135,67 +146,61 @@ def wait_for_boot() -> None:
 
 
 def select_pxe_entry() -> None:
-    print("selecting pxe entry")
+    logger.info("selecting pxe entry")
 
-    run("pkill -9 minicom")
-    print("spawn minicom")
-    child = pexpect.spawn(minicom_cmd("/dev/ttyUSB0"))
-    child.maxread = 10000
-    print("waiting for instructions to access boot menu")
-    child.expect("Press 'B' within 10 seconds for boot menu", 30)
-    time.sleep(1)
-    print("Pressing B to access boot menu")
-    child.send("b")
-    print("waiting for instructions to Boot from Secondary Boot Device")
-    child.expect("2\\) Boot from Secondary Boot Device", 10)
-    time.sleep(1)
-    child.send("2")
-    print("waiting to escape to UEFI boot menu")
-    child.expect("Press ESCAPE for boot options", 60)
-    print("Sending escape 5 times")
-    child.send(ESC * 5)
-    print("waiting on language option")
-    child.expect(
-        "This is the option.*one adjusts to change.*the language for the.*current system",
-        timeout=3,
-    )
-    print("pressing down")
-    child.send(KEY_DOWN)
-    time.sleep(1)
-    print("pressing down again")
-    child.send(KEY_DOWN)
-    print("waiting for Boot manager entry")
-    child.expect("This selection will.*take you to the Boot.*Manager", timeout=3)
-    child.send(KEY_ENTER)
-    child.expect("Device Path")
-    retry = 30
-    print(f"Trying up to {retry} times to find pxe boot interface")
-    while retry:
-        child.send(KEY_DOWN)
-        time.sleep(0.1)
-        try:
-            # TODO: FIXME: We need to read the port configuration.
-            # e.g. 80AA99887766 + number of lanes used in the SERDES
-            child.expect("UEFI PXEv4.*MAC:80AA99887767", timeout=1)
-            break
-        except Exception:
-            retry -= 1
-    if not retry:
-        e = Exception("Didn't find boot interface")
-        print(e)
-        raise e
-    else:
-        print(f"Found boot interface after {30 - retry} tries, sending enter")
-        child.send(KEY_ENTER)
-        time.sleep(10)
-        # Use the ^ and v keys to select which entry is highlighted.
-        # Press enter to boot the selected OS, `e' to edit the commands
-        # before booting or `c' for a command-line.
-        # time.sleep(1)
-        # timeout = 30
-
-    child.close()
-    print("Closing minicom")
+    with common.Serial(common_dpu.TTYUSB0) as ser:
+        logger.info("waiting for instructions to access boot menu")
+        ser.expect("Press 'B' within 10 seconds for boot menu", 30)
+        time.sleep(1)
+        logger.info("Pressing B to access boot menu")
+        ser.send("b")
+        logger.info("waiting for instructions to Boot from Secondary Boot Device")
+        ser.expect("2\\) Boot from Secondary Boot Device", 10)
+        time.sleep(1)
+        ser.send("2")
+        logger.info("waiting to escape to UEFI boot menu")
+        ser.expect("Press ESCAPE for boot options", 60)
+        logger.info("Sending escape 5 times")
+        ser.send(ESC * 5)
+        logger.info("waiting on language option")
+        ser.expect(
+            "This is the option.*one adjusts to change.*the language for the.*current system",
+            3,
+        )
+        logger.info("pressing down")
+        ser.send(KEY_DOWN)
+        time.sleep(1)
+        logger.info("pressing down again")
+        ser.send(KEY_DOWN)
+        logger.info("waiting for Boot manager entry")
+        ser.expect("This selection will.*take you to the Boot.*Manager", 3)
+        ser.send(KEY_ENTER)
+        ser.expect("Device Path")
+        retry = 30
+        logger.info(f"Trying up to {retry} times to find pxe boot interface")
+        while retry:
+            ser.send(KEY_DOWN)
+            time.sleep(0.1)
+            try:
+                # TODO: FIXME: We need to read the port configuration.
+                # e.g. 80AA99887766 + number of lanes used in the SERDES
+                ser.expect("UEFI PXEv4.*MAC:80AA99887767", 1)
+                break
+            except Exception:
+                retry -= 1
+        if not retry:
+            e = Exception("Didn't find boot interface")
+            logger.info(e)
+            raise e
+        else:
+            logger.info(f"Found boot interface after {30 - retry} tries, sending enter")
+            ser.send(KEY_ENTER)
+            time.sleep(10)
+            # Use the ^ and v keys to select which entry is highlighted.
+            # Press enter to boot the selected OS, `e' to edit the commands
+            # before booting or `c' for a command-line.
+            # time.sleep(1)
+            # timeout = 30
 
 
 def write_hosts_entry(host_path: str, dpu_name: str) -> None:
@@ -212,19 +217,54 @@ def post_pxeboot(host_mode: str, host_path: str, dpu_name: str) -> None:
         write_hosts_entry(host_path, dpu_name)
 
 
+def detect_yum_repo_url() -> str:
+    res = host.local.run(
+        [
+            "sed",
+            "-n",
+            "s/^name=Red Hat Enterprise Linux \\([0-9]\\+\\.[0-9]\\+\\).0$/\\1/p",
+            f"{iso_mount_path}/media.repo",
+        ]
+    )
+    if res.success and res.out:
+        os_version = res.out.splitlines()[-1].strip()
+        url_base = (
+            "http://download.hosts.prod.upshift.rdu2.redhat.com/rhel-9/composes/RHEL-9/"
+        )
+        sed_pattern = f's/.*href="\\(RHEL-{os_version}.0-updates[^"]*\\)".*/\\1/p'
+        res = host.local.run(
+            f"curl -s {shlex.quote(url_base)} | "
+            f"sed -n {shlex.quote(sed_pattern)} | "
+            "grep -v delete-me/ | sort | tail -n1"
+        )
+        if res.success:
+            part = res.out.strip()
+            if part:
+                return f"{url_base}{part}"
+    return ""
+
+
 def copy_kickstart(
     host_path: str,
     dpu_name: str,
     ssh_pubkey: list[str],
     yum_repos: str,
     nm_secondary_cloned_mac_address: str,
+    nm_secondary_ip_address: str,
+    nm_secondary_ip_gateway: str,
 ) -> None:
+    ip_address = ""
+    if nm_secondary_ip_address:
+        ip_address = f"address1={nm_secondary_ip_address}"
+        if nm_secondary_ip_gateway:
+            ip_address += f",{nm_secondary_ip_gateway}"
+
     with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
         kickstart = f.read()
 
     yum_repo_enabled = yum_repos == "rhel-nightly"
 
-    kickstart = kickstart.replace("@__FQDNNAME__@", shlex.quote(f"{dpu_name}.redhat"))
+    kickstart = kickstart.replace("@__HOSTNAME__@", shlex.quote(dpu_name))
     kickstart = kickstart.replace(
         "@__SSH_PUBKEY__@", shlex.quote("\n".join(ssh_pubkey))
     )
@@ -234,7 +274,13 @@ def copy_kickstart(
         "@__NM_SECONDARY_CLONED_MAC_ADDRESS__@",
         nm_secondary_cloned_mac_address,
     )
-    kickstart = kickstart.replace("@__YUM_REPO_URL__@", shlex.quote(""))
+    kickstart = kickstart.replace(
+        "@__NM_SECONDARY_IP_ADDRESS__@",
+        ip_address,
+    )
+    kickstart = kickstart.replace(
+        "@__YUM_REPO_URL__@", shlex.quote(detect_yum_repo_url())
+    )
     kickstart = kickstart.replace(
         "@__YUM_REPO_ENABLED__@", shlex.quote("1" if yum_repo_enabled else "0")
     )
@@ -261,17 +307,25 @@ def setup_http(
     ssh_pubkey: list[str],
     yum_repos: str,
     nm_secondary_cloned_mac_address: str,
+    nm_secondary_ip_address: str,
+    nm_secondary_ip_gateway: str,
 ) -> None:
     os.makedirs("/www", exist_ok=True)
     run(f"ln -s {iso_mount_path} /www")
 
     copy_kickstart(
-        host_path, dpu_name, ssh_pubkey, yum_repos, nm_secondary_cloned_mac_address
+        host_path,
+        dpu_name,
+        ssh_pubkey,
+        yum_repos,
+        nm_secondary_cloned_mac_address,
+        nm_secondary_ip_address,
+        nm_secondary_ip_gateway,
     )
 
     def http_server() -> None:
         os.chdir("/www")
-        server_address = ("", 80)
+        server_address = (common_dpu.host_ip4addr, 24380)
         handler = http.server.SimpleHTTPRequestHandler
         httpd = http.server.HTTPServer(server_address, handler)
         httpd.serve_forever()
@@ -379,6 +433,8 @@ def main() -> None:
             ssh_pubkey,
             args.yum_repos,
             args.nm_secondary_cloned_mac_address,
+            args.nm_secondary_ip_address,
+            args.nm_secondary_ip_gateway,
         )
         print("Giving services time to settle")
         time.sleep(10)
