@@ -4,6 +4,7 @@ import os
 import pathlib
 import pytest
 import random
+import re
 import sys
 
 from collections.abc import Mapping
@@ -178,6 +179,36 @@ def test_host_result_str() -> None:
     assert res == host.Result("out", "err", 0)
 
 
+def test_host_result_match() -> None:
+    res = host.Result("out", "err", 0)
+
+    assert res.match()
+    assert res.match(returncode=0)
+    assert not res.match(returncode=4)
+
+    assert res.match(out="out")
+    assert res.match(out="out", err="err", returncode=0)
+    assert res.match(out=re.compile("o"), err="err", returncode=0)
+    assert not res.match(out=re.compile("xx"), err="err", returncode=0)
+
+    assert res.match(out=re.compile("."))
+
+    rx = re.compile(b".")
+    with pytest.raises(TypeError):
+        res.match(out=rx)  # type: ignore
+
+    res_bin = host.BinResult(b"out", b"err", 0)
+    assert res_bin.match(out=b"out")
+    assert res_bin.match(err=b"err")
+    assert res_bin.match(out=re.compile(b"out"))
+    assert res_bin.match(out=re.compile(b"^out$"))
+    assert res_bin.match(out=re.compile(b"u"))
+
+    assert res_bin.match(out=re.compile(b"."))
+    with pytest.raises(TypeError):
+        res_bin.match(out=re.compile("."))  # type: ignore
+
+
 def test_host_various_results() -> None:
     res = host.local.run('printf "foo:\\705x"')
     assert res == host.Result("foo:\ufffdx", "", 0)
@@ -226,6 +257,7 @@ def test_host_check_success() -> None:
     res = host.local.run("echo -n foo; exit 74", check_success=lambda r: r.success)
     assert res == host.Result("foo", "", 74)
     assert not res.success
+    assert not res
 
     res = host.local.run("echo -n foo; exit 74", check_success=lambda r: r.out == "foo")
     assert res == host.Result("foo", "", 74, forced_success=True)
@@ -236,6 +268,7 @@ def test_host_check_success() -> None:
     )
     assert binres == host.BinResult(b"foo", b"", 74, forced_success=True)
     assert binres.success
+    assert binres
 
 
 def test_host_file_exists() -> None:

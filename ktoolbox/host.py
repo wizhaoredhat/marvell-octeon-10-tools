@@ -1,6 +1,7 @@
 import dataclasses
 import logging
 import os
+import re
 import select
 import shlex
 import subprocess
@@ -15,15 +16,16 @@ from collections.abc import Iterable
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+from typing import AnyStr
 from typing import Callable
 from typing import Optional
 from typing import Union
 
-from .logger import logger
 
 INTERNAL_ERROR_PREFIX = "Host.run(): "
 INTERNAL_ERROR_RETURNCODE = 1
 
+logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 
@@ -83,22 +85,19 @@ def _unique_log_id() -> int:
         return _unique_log_id_value
 
 
-T = typing.TypeVar("T", bound=Union[str, bytes])
-
-
 @dataclass(frozen=True)
-class _BaseResult(ABC, typing.Generic[T]):
+class _BaseResult(ABC, typing.Generic[AnyStr]):
     # _BaseResult only exists to have the first 3 parameters positional
     # arguments and the subsequent parameters (in BaseResult) marked as
     # KW_ONLY_DATACLASS. Once we no longer support Python 3.9, the classes
     # can be merged.
-    out: T
-    err: T
+    out: AnyStr
+    err: AnyStr
     returncode: int
 
 
 @dataclass(frozen=True, **KW_ONLY_DATACLASS)
-class BaseResult(_BaseResult[T]):
+class BaseResult(_BaseResult[AnyStr]):
     # In most cases, "success" is the same as checking for returncode zero.  In
     # some cases, it can be overwritten to be of a certain value.
     forced_success: Optional[bool] = dataclasses.field(
@@ -111,6 +110,9 @@ class BaseResult(_BaseResult[T]):
         if self.forced_success is not None:
             return self.forced_success
         return self.returncode == 0
+
+    def __bool__(self) -> bool:
+        return self.success
 
     def debug_str(self, *, with_output: bool = True) -> str:
         if self.forced_success is None or self.forced_success == (self.returncode == 0):
@@ -137,6 +139,29 @@ class BaseResult(_BaseResult[T]):
     def debug_msg(self) -> str:
         return f"cmd {self.debug_str()}"
 
+    def match(
+        self,
+        *,
+        out: Optional[Union[AnyStr, re.Pattern[AnyStr]]] = None,
+        err: Optional[Union[AnyStr, re.Pattern[AnyStr]]] = None,
+        returncode: Optional[int] = None,
+    ) -> bool:
+        if returncode is not None:
+            if self.returncode != returncode:
+                return False
+
+        def _check(
+            val: AnyStr,
+            compare: Optional[Union[AnyStr, re.Pattern[AnyStr]]],
+        ) -> bool:
+            if compare is None:
+                return True
+            if isinstance(compare, re.Pattern):
+                return bool(compare.search(val))
+            return val == compare
+
+        return _check(self.out, out) and _check(self.err, err)
+
 
 @dataclass(frozen=True)
 class Result(BaseResult[str]):
@@ -158,6 +183,7 @@ class BinResult(BaseResult[bytes]):
             self.out.decode(errors=errors),
             self.err.decode(errors=errors),
             self.returncode,
+            forced_success=self.forced_success,
         )
 
     def dup_with_forced_success(self, forced_success: bool) -> "BinResult":
@@ -464,14 +490,28 @@ class Host(ABC):
         bin_result = bin_result.dup_with_forced_success(result_success)
 
         if result_log_level >= 0:
+            if log_lineoutput < 0:
+                # Line logging is disabled, we print the result now
+                with_output = True
+            elif result_log_level > log_lineoutput:
+                # We printed the lines, but that was at a lower log level than
+                # we are to print the result now. Log the output again.
+                #
+                # This is because here we are likely to log an error, and we
+                # want to see the output of the command for why the error
+                # happened.
+                with_output = True
+            else:
+                # No need to print the output again.
+                with_output = False
             if is_binary:
                 # Note that we log the output as binary if either "text=False" or if
                 # the output was not valid utf-8. In the latter case, we will still
                 # return a string Result (or re-raise decode_exception).
-                debug_str = bin_result.debug_str(with_output=log_lineoutput < 0)
+                debug_str = bin_result.debug_str(with_output=with_output)
             else:
                 assert str_result is not None
-                debug_str = str_result.debug_str(with_output=log_lineoutput < 0)
+                debug_str = str_result.debug_str(with_output=with_output)
 
             logger.log(
                 result_log_level,

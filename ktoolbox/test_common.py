@@ -249,7 +249,7 @@ def test_strict_dataclass() -> None:
     @common.strict_dataclass
     @dataclasses.dataclass
     class C3:
-        a: typing.List[str]
+        a: list[str]
 
     C3([])
     C3([""])
@@ -263,14 +263,14 @@ def test_strict_dataclass() -> None:
     @common.strict_dataclass
     @dataclasses.dataclass
     class C4:
-        a: typing.Optional[typing.List[str]]
+        a: typing.Optional[list[str]]
 
     C4(None)
 
     @common.strict_dataclass
     @dataclasses.dataclass
     class C5:
-        a: typing.Optional[typing.List[typing.Dict[str, str]]] = None
+        a: typing.Optional[list[dict[str, str]]] = None
 
     C5(None)
     C5([])
@@ -286,7 +286,7 @@ def test_strict_dataclass() -> None:
     @common.strict_dataclass
     @dataclasses.dataclass
     class C6:
-        a: typing.Optional[typing.Tuple[str, str]] = None
+        a: typing.Optional[tuple[str, str]] = None
 
     C6()
     C6(None)
@@ -311,7 +311,7 @@ def test_strict_dataclass() -> None:
     @common.strict_dataclass
     @dataclasses.dataclass
     class C7:
-        addr_info: typing.List[TstPodInfo]
+        addr_info: list[TstPodInfo]
 
         def _post_check(self) -> None:
             pass
@@ -321,7 +321,7 @@ def test_strict_dataclass() -> None:
     C7([])
     C7([TstPodInfo("name", TstPodType.NORMAL, True, 5)])
     with pytest.raises(TypeError):
-        C7([TstPodInfo("name", TstPodType.NORMAL, True, 5), None])  # type:ignore
+        C7([TstPodInfo("name", TstPodType.NORMAL, True, 5), None])  # type: ignore
 
     @common.strict_dataclass
     @dataclasses.dataclass
@@ -407,6 +407,106 @@ def test_dataclass_tofrom_dict() -> None:
     assert type(common.dataclass_from_dict(C10, {"x": 1.0}).x) is float
     assert type(c10.x) is int
     assert type(C10(1.0).x) is float
+
+
+def test_iter_get_first() -> None:
+
+    lst: list[int]
+
+    lst = []
+    v2a = common.iter_get_first(lst)
+    if sys.version_info >= (3, 10):
+        typing.assert_type(v2a, Optional[int])
+    assert v2a is None
+
+    lst = [123]
+    v2b = common.iter_get_first(lst)
+    if sys.version_info >= (3, 10):
+        typing.assert_type(v2b, Optional[int])
+    assert v2b == 123
+
+    lst = [12, 13]
+    v2c = common.iter_get_first(lst)
+    if sys.version_info >= (3, 10):
+        typing.assert_type(v2c, Optional[int])
+    assert v2c == 12
+
+    lst = []
+    v3a = common.iter_get_first(lst, unique=True)
+    if sys.version_info >= (3, 10):
+        typing.assert_type(v3a, Optional[int])
+    assert v3a is None
+
+    lst = [123]
+    v3b = common.iter_get_first(lst, unique=True)
+    if sys.version_info >= (3, 10):
+        typing.assert_type(v3b, Optional[int])
+    assert v3b == 123
+
+    lst = [12, 13]
+    v3c = common.iter_get_first(lst, unique=True)
+    if sys.version_info >= (3, 10):
+        typing.assert_type(v3c, Optional[int])
+    assert v3c is None
+
+    lst = []
+    v5a = common.iter_get_first(lst, force_unique=True)
+    if sys.version_info >= (3, 10):
+        typing.assert_type(v5a, Optional[int])
+    assert v5a is None
+
+    lst = [123]
+    v5b = common.iter_get_first(lst, force_unique=True)
+    if sys.version_info >= (3, 10):
+        typing.assert_type(v5b, Optional[int])
+    assert v5b == 123
+
+    with pytest.raises(ValueError):
+        lst = [12, 13]
+        v5c = common.iter_get_first(lst, force_unique=True)
+        if sys.version_info >= (3, 10):
+            typing.assert_type(v5c, Optional[int])
+        assert False
+
+    with pytest.raises(ValueError):
+        lst = []
+        v1a = common.iter_get_first(lst, unique=True, force_unique=True)
+        if sys.version_info >= (3, 10):
+            typing.assert_type(v1a, int)
+        assert False
+
+    lst = [101]
+    v1b = common.iter_get_first(lst, unique=True, force_unique=True)
+    if sys.version_info >= (3, 10):
+        typing.assert_type(v1b, int)
+    assert v1b == 101
+
+    with pytest.raises(ValueError):
+        lst = [102, 103]
+        v1c = common.iter_get_first(lst, unique=True, force_unique=True)
+        if sys.version_info >= (3, 10):
+            typing.assert_type(v1c, int)
+        assert False
+
+    with pytest.raises(ValueError):
+        lst = []
+        v6a = common.iter_get_first(lst, single=True)
+        if sys.version_info >= (3, 10):
+            typing.assert_type(v6a, int)
+        assert False
+
+    lst = [101]
+    v6b = common.iter_get_first(lst, single=True)
+    if sys.version_info >= (3, 10):
+        typing.assert_type(v6b, int)
+    assert v6b == 101
+
+    with pytest.raises(ValueError):
+        lst = [102, 103]
+        v6c = common.iter_get_first(lst, single=True)
+        if sys.version_info >= (3, 10):
+            typing.assert_type(v6c, int)
+        assert False
 
 
 def test_kw_only() -> None:
@@ -1094,7 +1194,7 @@ def test_structparse_pop_objlist_as_dict() -> None:
         typing.assert_type(val2, dict[str, str])
 
     with pytest.raises(RuntimeError):
-        common.structparse_pop_objlist_to_dict(  # type:ignore
+        common.structparse_pop_objlist_to_dict(  # type: ignore
             {"foo": [0, 1, 2]},
             "path",
             "foo",

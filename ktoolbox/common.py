@@ -3,8 +3,11 @@ import contextlib
 import dataclasses
 import functools
 import json
+import logging
 import os
 import re
+import sys
+import threading
 import time
 import typing
 
@@ -17,7 +20,6 @@ from enum import Enum
 from typing import Any
 from typing import Literal
 from typing import Optional
-from typing import Type
 from typing import TypeVar
 from typing import Union
 from typing import cast
@@ -27,6 +29,12 @@ if typing.TYPE_CHECKING:
     # https://github.com/python/typeshed/blob/6220c20d9360b12e2287511587825217eec3e5b5/stdlib/_typeshed/__init__.pyi#L349
     from _typeshed import DataclassInstance
     from types import TracebackType
+    import argparse
+
+
+common_lock = threading.Lock()
+
+logger = logging.getLogger(__name__)
 
 
 PathType = Union[str, bytes, os.PathLike[str], os.PathLike[bytes]]
@@ -117,24 +125,102 @@ def str_to_bool(
     raise ValueError(f"Value {val} is not a boolean")
 
 
+@typing.overload
+def iter_get_first(
+    lst: Iterable[T],
+    *,
+    unique: typing.Literal[True],
+    force_unique: typing.Literal[True],
+    single: bool = False,
+) -> T:
+    pass
+
+
+@typing.overload
 def iter_get_first(
     lst: Iterable[T],
     *,
     unique: bool = False,
     force_unique: bool = False,
+    single: typing.Literal[True],
+) -> T:
+    pass
+
+
+@typing.overload
+def iter_get_first(
+    lst: Iterable[T],
+    *,
+    unique: bool = False,
+    force_unique: bool = False,
+    single: bool = False,
 ) -> Optional[T]:
-    v0: Optional[T] = None
-    for idx, v in enumerate(lst):
-        if idx == 0:
-            v0 = v
-            continue
+    pass
+
+
+def iter_get_first(
+    lst: Iterable[T],
+    *,
+    unique: bool = False,
+    force_unique: bool = False,
+    single: bool = False,
+) -> Optional[T]:
+    """
+    Returns the first item from the iterable `lst` based on specified conditions.
+
+    The function behaves differently depending on the parameters:
+
+    - By default, if neither `unique`, `force_unique` or `single` is set, the
+      function simply returns the first item from the iterable, or `None` if the
+      iterable is empty.
+
+    - If `unique=True`, it returns the first item if the iterable only contains
+      a single element. Otherwise `None` is returned.
+
+    - If `force_unique=True`, it ensures the iterable contains at most one
+      item and raises a ValueError if multiple unique items are found. An
+      empty iterable will give `None`.
+
+    - Setting both `unique=True` and `force_unique=True` together or setting
+      `single=True` enforces that the iterable contains exactly one element and
+      returns it (raising an ValueError otherwise).
+
+    Args:
+        lst (Iterable[T]): The input iterable.
+        unique (bool, optional): Returns `None` if the iterable contains multiple elements. Defaults to False.
+        force_unique (bool, optional): Raises a ValueError if the iterable contains multiple elements. Defaults to False.
+        single (bool, optional): Shorthand for `unique=True` and `force_unique=True` to raise a ValueError if the iterable does not contain exaclty one element. Defaults to False.
+
+    Returns:
+        Optional[T]: The first item from the iterable, or `None` if the iterable is empty. Raises an error if conditions set
+        by `unique`, `force_unique`, or `single` are violated.
+    """
+    if single:
+        # This is a shorthand for setting both "unique" and "force_unique".
+        unique = True
+        force_unique = True
+    itr = iter(lst)
+    try:
+        v0 = next(itr)
+    except StopIteration:
+        if unique and force_unique:
+            # Usually, an empty iterable is accepted, unless "unique" and
+            # "force_unique" are both True.
+            raise ValueError(
+                "Iterable was expected to contain one element but was empty"
+            )
+        return None
+    try:
+        next(itr)
+    except StopIteration:
+        # There is only one element, we are good.
+        pass
+    else:
+        # Handle multiple elements.
         if force_unique:
-            raise RuntimeError("Iterable was expected to only contain one entry")
+            raise ValueError("Iterable was expected to only contain one entry")
         if unique:
-            # We have more than one entries. The caller requested to reject
-            # that.
             return None
-        return v0
     return v0
 
 
@@ -158,7 +244,7 @@ def unwrap(val: Optional[T], *, or_else: Optional[T] = None) -> T:
 
 
 def enum_convert(
-    enum_type: Type[E],
+    enum_type: type[E],
     value: Any,
     default: Optional[E] = None,
 ) -> E:
@@ -201,7 +287,7 @@ def enum_convert(
     raise ValueError(f"Invalid type for conversion to {enum_type}")
 
 
-def enum_convert_list(enum_type: Type[E], value: Any) -> list[E]:
+def enum_convert_list(enum_type: type[E], value: Any) -> list[E]:
     output: list[E] = []
 
     if isinstance(value, str):
@@ -373,7 +459,7 @@ def dataclass_to_json(obj: "DataclassInstance") -> str:
 
 # Takes a dataclass and the dict you want to convert from
 # If your dataclass has a dataclass member, it handles that recursively
-def dataclass_from_dict(cls: Type[T], data: dict[str, Any]) -> T:
+def dataclass_from_dict(cls: type[T], data: dict[str, Any]) -> T:
     if not is_dataclass(cls):
         raise ValueError(
             f"dataclass_from_dict() should only be used with dataclasses but is called with {cls}"
@@ -1126,11 +1212,9 @@ def etc_hosts_update_file(
 class Serial:
     def __init__(self, port: str, baudrate: int = 115200):
         import serial
-        from .logger import logger
 
         self.port = port
         self._ser = serial.Serial(port, baudrate=baudrate, timeout=0)
-        self._logger = logger
         self._buffer = ""
 
     @property
@@ -1141,7 +1225,7 @@ class Serial:
         self._ser.close()
 
     def send(self, msg: str, *, sleep: float = 1) -> None:
-        self._logger.debug(f"serial[{self.port}]: send {repr(msg)}")
+        logger.debug(f"serial[{self.port}]: send {repr(msg)}")
         self._ser.write(msg.encode("utf-8", errors="surrogateescape"))
         time.sleep(sleep)
 
@@ -1163,7 +1247,7 @@ class Serial:
         end_timestamp = time.monotonic() + timeout
         first_run = True
 
-        self._logger.debug(f"serial[{self.port}]: expect message {repr(pattern)}")
+        logger.debug(f"serial[{self.port}]: expect message {repr(pattern)}")
 
         if isinstance(pattern, str):
             # We use DOTALL like pexpect does.
@@ -1182,7 +1266,7 @@ class Serial:
                 if not b:
                     break
                 s = b.decode("utf-8", errors="surrogateescape")
-                self._logger.debug(
+                logger.debug(
                     f"serial[{self.port}]: read buffer ({len(self._buffer)} + {len(s)} unicode characters): {repr(s)}"
                 )
                 self._buffer += s
@@ -1190,7 +1274,7 @@ class Serial:
             matches = re.finditer(pattern_re, self._buffer)
             for match in matches:
                 end_idx = match.end()
-                self._logger.debug(
+                logger.debug(
                     f"serial[{self.port}]: found expected message {end_idx} unicode characters, {len(self._buffer) - end_idx} remaning"
                 )
                 self._buffer = self._buffer[end_idx:]
@@ -1201,7 +1285,7 @@ class Serial:
             else:
                 remaining_time = end_timestamp - time.monotonic()
                 if remaining_time <= 0:
-                    self._logger.debug(
+                    logger.debug(
                         f"serial[{self.port}]: did not find expected message {repr(pattern)} (buffer content is {repr(self._buffer)})"
                     )
                     raise RuntimeError(
@@ -1219,3 +1303,185 @@ class Serial:
         traceback: Optional["TracebackType"],
     ) -> None:
         self._ser.close()
+
+
+def _log_parse_level_str(lvl: str) -> Optional[int]:
+    lvl2 = lvl.lower().strip()
+    if lvl2:
+        log_levels = {
+            "debug": logging.DEBUG,
+            "info": logging.INFO,
+            "warning": logging.WARNING,
+            "error": logging.ERROR,
+            "critical": logging.CRITICAL,
+        }
+        if lvl2 in log_levels:
+            return log_levels[lvl2]
+    return None
+
+
+def log_parse_level(
+    lvl: Optional[Union[int, bool, str]],
+    *,
+    default_level: int = logging.INFO,
+) -> int:
+    if lvl is None or (isinstance(lvl, str) and lvl.lower().strip() == ""):
+        v = log_default_level()
+        if v is not None:
+            return v
+        return default_level
+    if isinstance(lvl, bool):
+        return logging.DEBUG if lvl else logging.INFO
+    if isinstance(lvl, int):
+        return lvl
+    if isinstance(lvl, str):
+        v = _log_parse_level_str(lvl)
+        if v is not None:
+            return v
+    raise ValueError(f"invalid log level {repr(lvl)}")
+
+
+@functools.cache
+def log_all_loggers() -> bool:
+    # By default, the main application calls common.log_config_logger()
+    # and configures only certain loggers ("myapp", "ktoolbox"). If
+    # KTOOLBOX_ALL_LOGGERS is set to True, then instead the root logger
+    # will be configured which may affect also other python modules.
+    return str_to_bool(os.getenv("KTOOLBOX_ALL_LOGGERS"), False)
+
+
+@functools.cache
+def log_default_level() -> Optional[int]:
+    # On the command line, various main programs allow to specify the log
+    # level. If they leave it unspecified, the default can be configured via
+    # "KTOOLBOX_LOGLEVEL" environment variable. If still unspecified, the
+    # default is determined by the main application that calls
+    # common.log_config_logger().
+    v = os.getenv("KTOOLBOX_LOGLEVEL")
+    if v is not None:
+        return _log_parse_level_str(v)
+    return None
+
+
+if typing.TYPE_CHECKING:
+    # https://github.com/python/cpython/issues/92128#issue-1222296106
+    # https://github.com/python/typeshed/pull/5954#issuecomment-1114270968
+    # https://mypy.readthedocs.io/en/stable/runtime_troubles.html#using-classes-that-are-generic-in-stubs-but-not-at-runtime
+    _LogStreamHandler = logging.StreamHandler[typing.TextIO]
+else:
+    _LogStreamHandler = logging.StreamHandler
+
+
+class _LogHandler(_LogStreamHandler):
+    def __init__(self, level: int):
+        super().__init__()
+        fmt = "%(asctime)s.%(msecs)03d %(levelname)-7s [th:%(thread)s]: %(message)s"
+        datefmt = "%Y-%m-%d %H:%M:%S"
+        formatter = logging.Formatter(fmt, datefmt)
+        self.setLevel(level)
+        self.setFormatter(formatter)
+
+    def setLevelWithLock(self, *, level: int) -> None:
+        self.acquire()
+        try:
+            self.setLevel(level)
+        finally:
+            self.release()
+
+
+def log_config_logger(
+    level: Optional[Union[int, bool, str]],
+    *loggers: Union[str, logging.Logger],
+    default_level: int = logging.INFO,
+) -> None:
+    level = log_parse_level(level, default_level=default_level)
+
+    if log_all_loggers():
+        # If the environment variable KTOOLBOX_ALL_LOGGERS is True,
+        # we configure the root logger instead.
+        loggers = ("",)
+
+    for logger in loggers:
+        if isinstance(logger, str):
+            logger = logging.getLogger(logger)
+        elif isinstance(logger, ExtendedLogger):
+            logger = logger.wrapped_logger
+
+        with common_lock:
+            handler = iter_get_first(
+                h for h in logger.handlers if isinstance(h, _LogHandler)
+            )
+
+            if handler is None:
+                handler = _LogHandler(level=level)
+                is_new_handler = True
+            else:
+                is_new_handler = False
+
+            logger.setLevel(level)
+
+            if is_new_handler:
+                logger.addHandler(handler)
+            else:
+                handler.setLevelWithLock(level=level)
+
+
+def log_argparse_add_argument_verbose(parser: "argparse.ArgumentParser") -> None:
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        default=None,
+        help="Enable debug logging (overwrites KTOOLBOX_LOGLEVEL environment). Set KTOOLBOX_ALL_LOGGERS to configure all loggers.",
+    )
+
+
+def log_argparse_add_argument_verbosity(
+    parser: "argparse.ArgumentParser",
+    *,
+    default: Optional[str] = None,
+) -> None:
+    if default is None:
+        msg_default = "default: info, overwrites KTOOLBOX_LOGLEVEL environment"
+    else:
+        msg_default = f"default: {repr(default)}"
+    parser.add_argument(
+        "-v",
+        "--verbosity",
+        choices=["debug", "info", "warning", "error", "critical"],
+        default=default,
+        help=f"Set the logging level ({msg_default}). Set KTOOLBOX_ALL_LOGGERS to configure all loggers.",
+    )
+
+
+class ExtendedLogger(logging.Logger):
+    """A wrapper around a logger class with additional API
+
+    This is-a Logger, and it delegates almost everything to the intenal
+    logger instance. It implements a few convenience methods on top,
+    but it has no state of it's own. That means, as long as you call
+    API of the Logger base class, there is no difference between calling
+    an operation on the extended logger or the wrapped logger.
+    """
+
+    def __init__(self, logger: Union[str, logging.Logger]):
+        if isinstance(logger, str):
+            logger = logging.getLogger(logger)
+        self.wrapped_logger = logger
+
+    _EXTENDED_ATTRIBUTES = (
+        "wrapped_logger",
+        "error_and_exit",
+    )
+
+    def __getattribute__(self, name: str) -> Any:
+        # ExtendedLogger is-a logging.Logger, but it delegates most calls to
+        # the wrapped-logger (which is also a logging.Logger).
+        if name in ExtendedLogger._EXTENDED_ATTRIBUTES:
+            return object.__getattribute__(self, name)
+        logger = object.__getattribute__(self, "wrapped_logger")
+        return logger.__getattribute__(name)
+
+    def error_and_exit(self, msg: str, *, exit_code: int = -1) -> typing.NoReturn:
+        self.error(msg)
+        sys.exit(exit_code)

@@ -2,12 +2,12 @@
 
 import time
 
-from ktoolbox.logger import logger
 from ktoolbox import common
 
 import common_dpu
 
 from common_dpu import KEY_CTRL_M
+from common_dpu import logger
 
 
 def _reset(try_idx: int, retry_count: int) -> None:
