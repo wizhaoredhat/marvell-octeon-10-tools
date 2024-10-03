@@ -19,7 +19,6 @@ from common_dpu import ESC
 from common_dpu import KEY_DOWN
 from common_dpu import KEY_ENTER
 from common_dpu import logger
-from common_dpu import run
 from reset import reset
 
 
@@ -296,7 +295,7 @@ def setup_http(
     nm_secondary_ip_gateway: str,
 ) -> None:
     os.makedirs("/www", exist_ok=True)
-    run(f"ln -s {iso_mount_path} /www")
+    host.local.run(f"ln -s {shlex.quote(iso_mount_path)} /www")
 
     copy_kickstart(
         host_path,
@@ -324,7 +323,7 @@ def setup_tftp() -> None:
     print("Configuring TFTP")
     os.makedirs("/var/lib/tftpboot/pxelinux", exist_ok=True)
     print("starting in.tftpd")
-    run("killall in.tftpd")
+    host.local.run("killall in.tftpd")
     p = common_dpu.run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     children.append(p)
     shutil.copy(
@@ -388,7 +387,7 @@ def setup_dhcp() -> None:
     shutil.copy(
         common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"), "/etc/dhcp/dhcpd.conf"
     )
-    run("killall dhcpd")
+    host.local.run("killall dhcpd")
     p = common_dpu.run_process(
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
     )
@@ -397,8 +396,10 @@ def setup_dhcp() -> None:
 
 def mount_iso(iso_path: str) -> None:
     os.makedirs(iso_mount_path, exist_ok=True)
-    run(f"umount {iso_mount_path}")
-    run(f"mount -t iso9660 -o loop {iso_path} {iso_mount_path}")
+    host.local.run(f"umount {shlex.quote(iso_mount_path)}")
+    host.local.run(
+        f"mount -t iso9660 -o loop {shlex.quote(iso_path)} {shlex.quote(iso_mount_path)}"
+    )
 
 
 def main() -> None:

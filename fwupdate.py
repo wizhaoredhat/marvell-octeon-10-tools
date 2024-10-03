@@ -2,19 +2,20 @@
 
 import argparse
 import os
+import shlex
 import shutil
 import time
 
 from collections.abc import Iterable
 
 from ktoolbox import common
+from ktoolbox import host
 
 import common_dpu
 
 from common_dpu import ESC
 from common_dpu import KEY_ENTER
 from common_dpu import logger
-from common_dpu import run
 from common_dpu import run_process
 from reset import reset
 
@@ -120,7 +121,7 @@ def setup_tftp(img: str) -> None:
     print("Configuring TFTP")
     os.makedirs("/var/lib/tftpboot", exist_ok=True)
     print("starting in.tftpd")
-    run("killall in.tftpd")
+    host.local.run("killall in.tftpd")
     p = run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     children.append(p)
     shutil.copy(f"{img}", "/var/lib/tftpboot")
@@ -128,12 +129,12 @@ def setup_tftp(img: str) -> None:
 
 def setup_dhcp(dev: str) -> None:
     print("Configuring DHCP")
-    run(f"ip addr add 172.131.100.1/24 dev {dev}")
+    host.local.run(f"ip addr add 172.131.100.1/24 dev {shlex.quote(dev)}")
     shutil.copy(
         common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"),
         "/etc/dhcp/dhcpd.conf",
     )
-    run("killall dhcpd")
+    host.local.run("killall dhcpd")
     p = run_process(
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
     )
