@@ -9,12 +9,12 @@ from collections.abc import Iterable
 from multiprocessing import Process
 
 from ktoolbox import common
-from ktoolbox.logger import logger
 
 import common_dpu
 
 from common_dpu import ESC
 from common_dpu import KEY_ENTER
+from common_dpu import logger
 from common_dpu import run
 from reset import reset
 

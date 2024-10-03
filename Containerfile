@@ -8,6 +8,7 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         /usr/bin/ssh-keygen \
         dhcp-server \
         ethtool \
+        git \
         iproute \
         iputils \
         minicom \
@@ -27,8 +28,11 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         -y && \
     echo "export PYTHONPATH=/marvell-octeon-10-tools" > /etc/profile.d/marvell-octeon-10-tools.sh
 
+COPY requirements.txt /tmp/
+RUN python3 -m pip install -r /tmp/requirements.txt && \
+    rm -rf /tmp/requirements.txt
+
 COPY ./*.py ./*sh ./mypy.ini /marvell-octeon-10-tools/
-COPY ktoolbox/README.md ktoolbox/*.py /marvell-octeon-10-tools/ktoolbox/
 COPY ./manifests /marvell-octeon-10-tools/manifests
 
 COPY manifests/.minirc.dfl /root/
