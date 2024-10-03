@@ -7,7 +7,6 @@ import shlex
 import shutil
 import time
 
-from collections.abc import Iterable
 from multiprocessing import Process
 from typing import Optional
 
@@ -120,29 +119,20 @@ def ping(hn: str) -> bool:
     return run(ping_cmd).returncode == 0
 
 
-def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
-    print("Waiting for response from ping")
-    begin = time.time()
-    end = begin
-    hn = list(hn)
-    while end - begin < timeout:
-        for e in hn:
-            if ping(e):
-                return e
-        time.sleep(5)
-        end = time.time()
-    raise Exception(f"No response after {round(end - begin, 2)}s")
-
-
 def wait_for_boot() -> None:
-    time.sleep(1000)
-    try:
-        candidates = [f"172.131.100.{x}" for x in range(10, 21)]
-        response_ip = wait_any_ping(candidates, 12000)
-        print(f"got response from {response_ip}")
-    except Exception as e:
-        print("Failed to detect IP from Marvell card")
-        raise e
+    print(f"Wait for boot and IP address {common_dpu.dpu_ip4addr}")
+    end = time.monotonic() + 1800
+    sleep_time = 60
+    while True:
+        time.sleep(sleep_time)
+        sleep_time = max(int(sleep_time / 1.3), 9)
+        if ping(common_dpu.dpu_ip4addr):
+            print(f"got response from {common_dpu.dpu_ip4addr}")
+            break
+        if time.monotonic() > end:
+            raise RuntimeError(
+                f"Failed to detect IP {common_dpu.dpu_ip4addr} on Marvell card"
+            )
 
 
 def select_pxe_entry() -> None:
