@@ -114,11 +114,6 @@ def detect_host_mode(host_path: str, host_mode: str) -> str:
     return host_mode
 
 
-def ping(hn: str) -> bool:
-    ping_cmd = f"timeout 1 ping -4 -c 1 {hn}"
-    return run(ping_cmd).returncode == 0
-
-
 def wait_for_boot() -> None:
     print(f"Wait for boot and IP address {common_dpu.dpu_ip4addr}")
     end = time.monotonic() + 1800
@@ -126,7 +121,7 @@ def wait_for_boot() -> None:
     while True:
         time.sleep(sleep_time)
         sleep_time = max(int(sleep_time / 1.3), 9)
-        if ping(common_dpu.dpu_ip4addr):
+        if common_dpu.ping(common_dpu.dpu_ip4addr):
             print(f"got response from {common_dpu.dpu_ip4addr}")
             break
         if time.monotonic() > end:

@@ -57,16 +57,11 @@ def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
     hn = list(hn)
     while end - begin < timeout:
         for e in hn:
-            if ping(e):
+            if common_dpu.ping(e):
                 return e
         time.sleep(5)
         end = time.time()
     raise Exception(f"No response after {round(end - begin, 2)}s")
-
-
-def ping(hn: str) -> bool:
-    ping_cmd = f"timeout 1 ping -4 -c 1 {hn}"
-    return run(ping_cmd).returncode == 0
 
 
 def firmware_update(img_path: str) -> None:
