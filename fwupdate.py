@@ -6,7 +6,6 @@ import shutil
 import time
 
 from collections.abc import Iterable
-from multiprocessing import Process
 
 from ktoolbox import common
 
@@ -16,6 +15,7 @@ from common_dpu import ESC
 from common_dpu import KEY_ENTER
 from common_dpu import logger
 from common_dpu import run
+from common_dpu import run_process
 from reset import reset
 
 
@@ -42,12 +42,6 @@ def parse_args() -> argparse.Namespace:
         raise Exception("Invalid path to omg provided")
 
     return args
-
-
-def run_process(cmd: str) -> Process:
-    p = Process(target=run, args=(cmd,))
-    p.start()
-    return p
 
 
 def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
