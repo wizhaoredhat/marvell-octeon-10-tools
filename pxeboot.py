@@ -13,13 +13,13 @@ from typing import Optional
 
 from ktoolbox import common
 from ktoolbox import host
-from ktoolbox.logger import logger
 
 import common_dpu
 
 from common_dpu import ESC
 from common_dpu import KEY_DOWN
 from common_dpu import KEY_ENTER
+from common_dpu import logger
 from common_dpu import run
 from reset import reset
 

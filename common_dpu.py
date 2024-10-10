@@ -7,9 +7,9 @@ import subprocess
 from multiprocessing import Process
 from typing import Optional
 
+from ktoolbox import common
 from ktoolbox import firewall
 from ktoolbox import host
-from ktoolbox.logger import logger
 
 
 dpu_subnet = "172.131.100.0/24"
@@ -25,6 +25,11 @@ KEY_CTRL_M = "\r"
 
 TTYUSB0 = "/dev/ttyUSB0"
 TTYUSB1 = "/dev/ttyUSB1"
+
+
+logger = common.ExtendedLogger("marvell_toolbox")
+
+common.log_config_logger(logging.DEBUG, logger, "ktoolbox")
 
 
 @dataclasses.dataclass(frozen=True)
