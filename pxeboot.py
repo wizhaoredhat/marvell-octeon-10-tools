@@ -95,6 +95,11 @@ def parse_args() -> argparse.Namespace:
         default="",
         help='If set, configure ipv4.gateway on the "enP2p2s0-dpu-secondary" (requires "--nm-secondary-ip-address"). This should be in the same subnet as the address.',
     )
+    parser.add_argument(
+        "--prompt",
+        action="store_true",
+        help="If set, start DHCP/TFTP/HTTP services and wait for the user to press ENTER. This can be used to manually boot via PXE.",
+    )
 
     return parser.parse_args()
 
@@ -438,6 +443,10 @@ def main() -> None:
         )
         print("Giving services time to settle")
         time.sleep(10)
+        if args.prompt:
+            input(
+                "dhcp/tftp/http services started. Waiting. Press ENTER to continue or abort with CTRL+C"
+            )
         print("Starting UEFI PXE Boot")
         print("Resetting card")
         reset()
