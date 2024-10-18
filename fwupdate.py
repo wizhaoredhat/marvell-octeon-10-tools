@@ -2,20 +2,21 @@
 
 import argparse
 import os
+import shlex
 import shutil
 import time
 
 from collections.abc import Iterable
-from multiprocessing import Process
 
 from ktoolbox import common
+from ktoolbox import host
 
 import common_dpu
 
 from common_dpu import ESC
 from common_dpu import KEY_ENTER
 from common_dpu import logger
-from common_dpu import run
+from common_dpu import run_process
 from reset import reset
 
 
@@ -44,12 +45,6 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def run_process(cmd: str) -> Process:
-    p = Process(target=run, args=(cmd,))
-    p.start()
-    return p
-
-
 def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
     print("Waiting for response from ping")
     begin = time.time()
@@ -57,16 +52,11 @@ def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
     hn = list(hn)
     while end - begin < timeout:
         for e in hn:
-            if ping(e):
+            if common_dpu.ping(e):
                 return e
         time.sleep(5)
         end = time.time()
     raise Exception(f"No response after {round(end - begin, 2)}s")
-
-
-def ping(hn: str) -> bool:
-    ping_cmd = f"timeout 1 ping -4 -c 1 {hn}"
-    return run(ping_cmd).returncode == 0
 
 
 def firmware_update(img_path: str) -> None:
@@ -131,7 +121,7 @@ def setup_tftp(img: str) -> None:
     print("Configuring TFTP")
     os.makedirs("/var/lib/tftpboot", exist_ok=True)
     print("starting in.tftpd")
-    run("killall in.tftpd")
+    host.local.run("killall in.tftpd")
     p = run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     children.append(p)
     shutil.copy(f"{img}", "/var/lib/tftpboot")
@@ -139,12 +129,12 @@ def setup_tftp(img: str) -> None:
 
 def setup_dhcp(dev: str) -> None:
     print("Configuring DHCP")
-    run(f"ip addr add 172.131.100.1/24 dev {dev}")
+    host.local.run(f"ip addr add 172.131.100.1/24 dev {shlex.quote(dev)}")
     shutil.copy(
         common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"),
         "/etc/dhcp/dhcpd.conf",
     )
-    run("killall dhcpd")
+    host.local.run("killall dhcpd")
     p = run_process(
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
     )
