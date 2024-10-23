@@ -22,13 +22,15 @@ jobs:
         registry: quay.io
         username: ${{ secrets.QUAY_USERNAME }}
         password: ${{ secrets.QUAY_PASSWORD }}
+    - name: Set up Docker Buildx
+      run: |
+        docker buildx create --use
     - name: Build and Push Docker images
-      uses: docker/build-push-action@v2
-      with:
-        context: .
-        file: Containerfile
-        push: true
-        tags: |
-          quay.io/sdaniele/marvell-tools:${{ steps.date.outputs.date }}
-          quay.io/sdaniele/marvell-tools:latest
-
+      run: |
+        docker buildx build \
+          --file ./Containerfile \
+          --platform linux/arm64,linux/amd64 \
+          --tag quay.io/sdaniele/marvell-tools:latest \
+          --tag quay.io/sdaniele/marvell-tools:${{ steps.date.outputs.date }} \
+          --push \
+          .
