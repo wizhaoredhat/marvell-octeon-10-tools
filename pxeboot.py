@@ -7,7 +7,6 @@ import shlex
 import shutil
 import time
 
-from collections.abc import Iterable
 from multiprocessing import Process
 from typing import Optional
 
@@ -20,7 +19,6 @@ from common_dpu import ESC
 from common_dpu import KEY_DOWN
 from common_dpu import KEY_ENTER
 from common_dpu import logger
-from common_dpu import run
 from reset import reset
 
 
@@ -120,34 +118,20 @@ def detect_host_mode(host_path: str, host_mode: str) -> str:
     return host_mode
 
 
-def ping(hn: str) -> bool:
-    ping_cmd = f"timeout 1 ping -4 -c 1 {hn}"
-    return run(ping_cmd).returncode == 0
-
-
-def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
-    print("Waiting for response from ping")
-    begin = time.time()
-    end = begin
-    hn = list(hn)
-    while end - begin < timeout:
-        for e in hn:
-            if ping(e):
-                return e
-        time.sleep(5)
-        end = time.time()
-    raise Exception(f"No response after {round(end - begin, 2)}s")
-
-
 def wait_for_boot() -> None:
-    time.sleep(1000)
-    try:
-        candidates = [f"172.131.100.{x}" for x in range(10, 21)]
-        response_ip = wait_any_ping(candidates, 12000)
-        print(f"got response from {response_ip}")
-    except Exception as e:
-        print("Failed to detect IP from Marvell card")
-        raise e
+    print(f"Wait for boot and IP address {common_dpu.dpu_ip4addr}")
+    end = time.monotonic() + 1800
+    sleep_time = 60
+    while True:
+        time.sleep(sleep_time)
+        sleep_time = max(int(sleep_time / 1.3), 9)
+        if common_dpu.ping(common_dpu.dpu_ip4addr):
+            print(f"got response from {common_dpu.dpu_ip4addr}")
+            break
+        if time.monotonic() > end:
+            raise RuntimeError(
+                f"Failed to detect IP {common_dpu.dpu_ip4addr} on Marvell card"
+            )
 
 
 def select_pxe_entry() -> None:
@@ -316,7 +300,7 @@ def setup_http(
     nm_secondary_ip_gateway: str,
 ) -> None:
     os.makedirs("/www", exist_ok=True)
-    run(f"ln -s {iso_mount_path} /www")
+    host.local.run(f"ln -s {shlex.quote(iso_mount_path)} /www")
 
     copy_kickstart(
         host_path,
@@ -344,7 +328,7 @@ def setup_tftp() -> None:
     print("Configuring TFTP")
     os.makedirs("/var/lib/tftpboot/pxelinux", exist_ok=True)
     print("starting in.tftpd")
-    run("killall in.tftpd")
+    host.local.run("killall in.tftpd")
     p = common_dpu.run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     children.append(p)
     shutil.copy(
@@ -408,7 +392,7 @@ def setup_dhcp() -> None:
     shutil.copy(
         common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"), "/etc/dhcp/dhcpd.conf"
     )
-    run("killall dhcpd")
+    host.local.run("killall dhcpd")
     p = common_dpu.run_process(
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
     )
@@ -417,8 +401,10 @@ def setup_dhcp() -> None:
 
 def mount_iso(iso_path: str) -> None:
     os.makedirs(iso_mount_path, exist_ok=True)
-    run(f"umount {iso_mount_path}")
-    run(f"mount -t iso9660 -o loop {iso_path} {iso_mount_path}")
+    host.local.run(f"umount {shlex.quote(iso_mount_path)}")
+    host.local.run(
+        f"mount -t iso9660 -o loop {shlex.quote(iso_path)} {shlex.quote(iso_mount_path)}"
+    )
 
 
 def main() -> None:

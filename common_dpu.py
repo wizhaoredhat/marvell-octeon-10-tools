@@ -64,6 +64,14 @@ def run_process(cmd: str) -> Process:
     return p
 
 
+def ping(hn: str) -> bool:
+    return host.local.run(
+        f"timeout 1 ping -4 -c 1 {shlex.quote(hn)}",
+        log_level=-1,
+        log_level_result=logging.DEBUG,
+    ).success
+
+
 def packaged_file(relative_path: str) -> str:
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
 
