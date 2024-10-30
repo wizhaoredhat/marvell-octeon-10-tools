@@ -1,0 +1,3 @@
+#!/usr/bin/bash
+[ $# -le 1 ] || { printf '%s\n' "$0: Too many arguments. Specify \"/dev/ttyUSB0\"" ; exit 1 ; }
+exec minicom -D "${1:-/dev/ttyUSB0}"
