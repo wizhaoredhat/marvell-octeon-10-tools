@@ -36,6 +36,7 @@ COPY ./*.py ./*sh ./mypy.ini /marvell-octeon-10-tools/
 COPY ./manifests /marvell-octeon-10-tools/manifests
 
 COPY manifests/.minirc.dfl /root/
+COPY manifests/Minicom /usr/bin/
 
 WORKDIR /marvell-octeon-10-tools
 ENTRYPOINT ["/usr/bin/tini", "-s", "-p", "SIGTERM", "-g", "-e", "143", "--"]
