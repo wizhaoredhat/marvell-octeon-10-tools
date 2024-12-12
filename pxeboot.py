@@ -65,6 +65,7 @@ def parse_args() -> argparse.Namespace:
         help='How to treat the host. With "rhel" we configure a (persisted) NetworkManager connection profile for device (eno4). With "coreos", this only configures an ad-hoc IP address with iproute. Port forwarding is always ephemeral via nft rules.',
     )
     parser.add_argument(
+        "-H",
         "--host-setup-only",
         action="store_true",
         help="Installing the DPU also creates some ephemeral configuration. If you reboot the host, this is lost. Run the command with --host-setup-only to only recreate this configuration. This is idempotent.",
