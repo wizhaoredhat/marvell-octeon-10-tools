@@ -173,6 +173,12 @@ chmod +x /etc/yum.repos.d/marvell-tools-beaker.sh
 /etc/yum.repos.d/marvell-tools-beaker.sh @__YUM_REPO_URL__@ @__YUM_REPO_ENABLED__@
 
 EXTRA_PACKAGES=( @__EXTRA_PACKAGES__@ )
+if [ "@__DEFAULT_EXTRA_PACKAGES__@" = 1 ] ; then
+    case "$(sed -n 's/^VERSION_ID="\(.*\)"/\1/p' /etc/os-release)" in
+        *)
+            ;;
+    esac
+fi
 if [ "${#EXTRA_PACKAGES[@]}" -gt 0 ] ; then
     dnf install -y "${EXTRA_PACKAGES[@]}"
 fi
