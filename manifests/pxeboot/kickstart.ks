@@ -172,6 +172,11 @@ chmod +x /etc/yum.repos.d/marvell-tools-beaker.sh
 
 /etc/yum.repos.d/marvell-tools-beaker.sh @__YUM_REPO_URL__@ @__YUM_REPO_ENABLED__@
 
+EXTRA_PACKAGES=( @__EXTRA_PACKAGES__@ )
+if [ "${#EXTRA_PACKAGES[@]}" -gt 0 ] ; then
+    dnf install -y "${EXTRA_PACKAGES[@]}"
+fi
+
 ################################################################################
 
 # Allow password login as root.
