@@ -203,6 +203,52 @@ fi
 
 ################################################################################
 
+cat <<'EOF' > /usr/bin/run_octep_cp_agent
+#!/bin/bash
+
+CMD="${1:-run}"
+IMAGE="${IMAGE:-quay.io/sdaniele/marvell-tools:latest}"
+IMAGE="${2:-$IMAGE}"
+NAME=marvell-tools-cp-agent
+
+case "$CMD" in
+    run)
+        podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name "$NAME" -v /:/host -v /dev:/dev -it "$IMAGE" run_octep_cp_agent
+        ;;
+    stop)
+        podman stop "$NAME"
+        ;;
+    *)
+        echo "Usage: run_octep_cp_agent [ run | stop ] [ IMAGE ]"
+        echo "IMAGE=\"$IMAGE\""
+        echo "NAME=\"$NAME\""
+        podman ps -a --filter "name=$NAME"
+        exit 1
+        ;;
+esac
+EOF
+
+chmod +x /usr/bin/run_octep_cp_agent
+
+cat <<'EOF' > /etc/systemd/system/octep_cp_agent.service
+[Unit]
+Description=Run octep_cp_agent
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/run_octep_cp_agent run
+ExecStop=/usr/bin/run_octep_cp_agent stop
+Environment="IMAGE=quay.io/sdaniele/marvell-tools:latest"
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable octep_cp_agent.service
+
+################################################################################
+
 # Allow password login as root.
 sed -i 's/.*PermitRootLogin.*/# \0\nPermitRootLogin yes/' /etc/ssh/sshd_config
 

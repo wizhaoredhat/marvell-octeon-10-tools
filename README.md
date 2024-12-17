@@ -82,3 +82,14 @@ killall in.tftpd
 systemctl stop tftp.service
 systemctl stop tftp.socket
 ```
+
+### Run octep_cp_agent
+
+On aarch64/arm64, the container also contains a build of octep_cp_agent from [github](https://github.com/MarvellEmbeddedProcessors/pcie_ep_octeon_target.git).
+See `/usr/bin/{octep_cp_agent,cn106xx.cfg}`. You can run:
+
+```
+IMAGE=quay.io/sdaniele/marvell-tools:latest
+sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools-cp-agent -v /:/host -v /dev:/dev -it "$IMAGE" \
+  run_octep_cp_agent
+```
