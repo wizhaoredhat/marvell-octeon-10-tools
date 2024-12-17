@@ -172,6 +172,26 @@ chmod +x /etc/yum.repos.d/marvell-tools-beaker.sh
 
 /etc/yum.repos.d/marvell-tools-beaker.sh @__YUM_REPO_URL__@ @__YUM_REPO_ENABLED__@
 
+EXTRA_PACKAGES=( @__EXTRA_PACKAGES__@ )
+if [ "@__DEFAULT_EXTRA_PACKAGES__@" = 1 ] ; then
+    case "$(sed -n 's/^VERSION_ID="\(.*\)"/\1/p' /etc/os-release)" in
+        9.4)
+            # The rhel-9.4 kernel currently lacks patches for the Marvell DPU. Install
+            # a rebuild of upstream netnet kernel (with a rhel-9.4 config).
+            EXTRA_PACKAGES+=(
+                "http://file.brq.redhat.com/~thaller/marvell-octeon-10-tools/kernel-6.13.0_rc1.octeontx2_1_3d64c3d3c6d8+-1/kernel-6.13.0_rc1.octeontx2_1_3d64c3d3c6d8+-1.aarch64.rpm"
+                "http://file.brq.redhat.com/~thaller/marvell-octeon-10-tools/kernel-6.13.0_rc1.octeontx2_1_3d64c3d3c6d8+-1/kernel-devel-6.13.0_rc1.octeontx2_1_3d64c3d3c6d8+-1.aarch64.rpm"
+                "http://file.brq.redhat.com/~thaller/marvell-octeon-10-tools/kernel-6.13.0_rc1.octeontx2_1_3d64c3d3c6d8+-1/kernel-headers-6.13.0_rc1.octeontx2_1_3d64c3d3c6d8+-1.aarch64.rpm"
+            )
+            ;;
+        *)
+            ;;
+    esac
+fi
+if [ "${#EXTRA_PACKAGES[@]}" -gt 0 ] ; then
+    dnf install -y "${EXTRA_PACKAGES[@]}"
+fi
+
 ################################################################################
 
 # Allow password login as root.

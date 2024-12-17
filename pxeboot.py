@@ -99,6 +99,18 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="If set, start DHCP/TFTP/HTTP services and wait for the user to press ENTER. This can be used to manually boot via PXE.",
     )
+    parser.add_argument(
+        "-i",
+        "--extra-package",
+        default=[],
+        action="append",
+        help="List of extra packages that are installed during kickstart.",
+    )
+    parser.add_argument(
+        "--default-extra-packages",
+        action="store_true",
+        help="If true, install additional default packages during kickstart. See '@__DEFAULT_EXTRA_PACKAGES__@' in \"manifests/pxeboot/kickstart.ks\".",
+    )
 
     return parser.parse_args()
 
@@ -242,6 +254,8 @@ def copy_kickstart(
     nm_secondary_cloned_mac_address: str,
     nm_secondary_ip_address: str,
     nm_secondary_ip_gateway: str,
+    extra_package: list[str],
+    default_extra_packages: bool,
 ) -> None:
     ip_address = ""
     if nm_secondary_ip_address:
@@ -274,6 +288,14 @@ def copy_kickstart(
     kickstart = kickstart.replace(
         "@__YUM_REPO_ENABLED__@", shlex.quote("1" if yum_repo_enabled else "0")
     )
+    kickstart = kickstart.replace(
+        "@__EXTRA_PACKAGES__@",
+        " ".join(shlex.quote(s) for s in extra_package),
+    )
+    kickstart = kickstart.replace(
+        "@__DEFAULT_EXTRA_PACKAGES__@",
+        "1" if default_extra_packages else "0",
+    )
 
     res = host.local.run(
         [
@@ -299,6 +321,8 @@ def setup_http(
     nm_secondary_cloned_mac_address: str,
     nm_secondary_ip_address: str,
     nm_secondary_ip_gateway: str,
+    extra_package: list[str],
+    default_extra_packages: bool,
 ) -> None:
     os.makedirs("/www", exist_ok=True)
     host.local.run(f"ln -s {shlex.quote(iso_mount_path)} /www")
@@ -311,6 +335,8 @@ def setup_http(
         nm_secondary_cloned_mac_address,
         nm_secondary_ip_address,
         nm_secondary_ip_gateway,
+        extra_package,
+        default_extra_packages,
     )
 
     def http_server() -> None:
@@ -427,6 +453,8 @@ def main() -> None:
             args.nm_secondary_cloned_mac_address,
             args.nm_secondary_ip_address,
             args.nm_secondary_ip_gateway,
+            args.extra_package,
+            args.default_extra_packages,
         )
         print("Giving services time to settle")
         time.sleep(10)
