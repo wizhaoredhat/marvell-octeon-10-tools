@@ -252,4 +252,6 @@ systemctl enable octep_cp_agent.service
 # Allow password login as root.
 sed -i 's/.*PermitRootLogin.*/# \0\nPermitRootLogin yes/' /etc/ssh/sshd_config
 
+systemctl disable NetworkManager-wait-online.service
+
 %end
