@@ -46,7 +46,7 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         /usr/bin/ssh-keygen \
         dhcp-server \
         ethtool \
-        git \
+        git-core \
         iproute \
         iputils \
         minicom \
@@ -59,9 +59,11 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         python3-requests \
         python3-types-pyyaml \
         python39 \
+        tcpdump \
         tftp \
         tftp-server \
         tini \
+        unzip \
         vim \
         -y && \
     echo "export PYTHONPATH=/marvell-octeon-10-tools" > /etc/profile.d/marvell-octeon-10-tools.sh
