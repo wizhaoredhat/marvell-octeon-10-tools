@@ -249,6 +249,10 @@ systemctl enable octep_cp_agent.service
 
 ################################################################################
 
+dnf remove -y nano
+
+################################################################################
+
 # Allow password login as root.
 sed -i 's/.*PermitRootLogin.*/# \0\nPermitRootLogin yes/' /etc/ssh/sshd_config
 
