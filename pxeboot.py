@@ -406,7 +406,7 @@ def prepare_host(
     if add_host_key:
         ssh_privkey_file = common_dpu.ssh_generate_key(
             host_path,
-            create=(host_mode == "rhel"),
+            create=True,
         )
         if ssh_privkey_file is not None:
             ssh_pubkey.append(common_dpu.ssh_read_pubkey(ssh_privkey_file))
