@@ -1,4 +1,4 @@
-PyYAML>=6.0.1
+PyYAML
 paramiko
 pyserial
 git+https://github.com/thom311/ktoolbox@0e0db5c1fcecf896ab1e50b33900bb642ffe4ef8
