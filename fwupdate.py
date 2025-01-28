@@ -5,6 +5,7 @@ import os
 import shlex
 import shutil
 import time
+import typing
 
 from collections.abc import Iterable
 
@@ -20,6 +21,13 @@ from common_dpu import run_process
 from reset import reset
 
 
+DEFAULT_IMG_UBOOT = (
+    "http://file.brq.redhat.com/~thaller/marvell-sdk/flash-cn10ka-SDK11.24.03.img"
+)
+DEFAULT_IMG_UEFI = (
+    "http://file.brq.redhat.com/~thaller/marvell-sdk/flash-uefi-cn10ka-SDK11.23.11.img"
+)
+
 children = []
 
 
@@ -28,7 +36,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "img",
         type=str,
-        help="Mandatory argument of type string for IMG file (make sure the path to this file was mounted when running the pod via -v /host/img:/container/img).",
+        nargs="?",
+        default=None,
+        help=f'IMG file with firmware. For path names, make sure the path is reachable from inside the container (e.g. run `podman -v /:/host`). This can also be a HTTP/HTTPS URL. The special words "uboot" (for "{DEFAULT_IMG_UBOOT}" and "uefi" (for "{DEFAULT_IMG_UEFI}") are supported. The default depends on "--boot-device" and is "uboot" (for "primary") or "uefi" (for "secondary").',
     )
     parser.add_argument(
         "--dev",
@@ -50,11 +60,37 @@ def parse_args() -> argparse.Namespace:
     )
 
     args = parser.parse_args()
-    if not os.path.exists(args.img):
-        print(f"Couldn't read img file {args.img}")
-        raise Exception("Invalid path to omg provided")
 
     return args
+
+
+def prepare_image(boot_device: str, img: typing.Optional[str]) -> str:
+    if not img:
+        if boot_device == "primary":
+            img = "uboot"
+        else:
+            img = "uefi"
+
+    if img == "uboot":
+        img = DEFAULT_IMG_UBOOT
+    elif img == "uefi":
+        img = DEFAULT_IMG_UEFI
+
+    if img.startswith("http://") or img.startswith("https://"):
+        img2 = "/tmp/fwupdate.img"
+        logger.info(f"downloading {repr(img)} to {repr(img2)}.")
+        host.local.run(
+            ["curl", "-k", "-L", "-o", img2, img],
+            die_on_error=True,
+        )
+        img = img2
+    else:
+        logger.info(f"using image {repr(img)}.")
+
+    if not os.path.exists(img):
+        logger.error(f"Couldn't find img file {shlex.quote(img)}")
+        raise Exception(f"Invalid image path {shlex.quote(img)}")
+    return img
 
 
 def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
@@ -158,9 +194,10 @@ def setup_dhcp(dev: str) -> None:
 
 def main() -> None:
     args = parse_args()
+    img = prepare_image(args.boot_device, args.img)
     print("Preparing services for FW update")
     setup_dhcp(args.dev)
-    setup_tftp(args.img)
+    setup_tftp(img)
     print("Giving services time to settle")
     time.sleep(10)
 
@@ -172,7 +209,7 @@ def main() -> None:
     print("Starting FW Update")
     print("Resetting card")
     reset()
-    firmware_update(args.img, args.boot_device)
+    firmware_update(img, args.boot_device)
     print("Terminating http, tftp, and dhcpd")
     for e in children:
         e.terminate()
