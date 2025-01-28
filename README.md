@@ -6,6 +6,10 @@ IMAGE=quay.io/sdaniele/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" <cmd>
 ```
 
+## PXE Booting RHEL on Marvell DPU
+
+See [pxe_boot_rhel.md](pxe_boot_rhel.md).
+
 ## Tools
 
 ### Reset
