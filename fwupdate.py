@@ -36,6 +36,11 @@ def parse_args() -> argparse.Namespace:
         default="eno4",
         help="Optional argument of type string for device. Default is 'eno4'.",
     )
+    parser.add_argument(
+        "--prompt",
+        action="store_true",
+        help="If set, start DHCP/TFTP/HTTP services and wait for the user to press ENTER. This can be used to manually setup the host side serving the firmware.",
+    )
 
     args = parser.parse_args()
     if not os.path.exists(args.img):
@@ -148,6 +153,12 @@ def main() -> None:
     setup_tftp(args.img)
     print("Giving services time to settle")
     time.sleep(10)
+
+    if args.prompt:
+        input(
+            "dhcp/tftp/http services started. Waiting. Press ENTER to continue or abort with CTRL+C"
+        )
+
     print("Starting FW Update")
     print("Resetting card")
     reset()
