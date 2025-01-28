@@ -41,6 +41,13 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="If set, start DHCP/TFTP/HTTP services and wait for the user to press ENTER. This can be used to manually setup the host side serving the firmware.",
     )
+    parser.add_argument(
+        "-B",
+        "--boot-device",
+        choices=["primary", "secondary"],
+        default="secondary",
+        help='Select primary or secondary boot device. Defaults to "secondary".',
+    )
 
     args = parser.parse_args()
     if not os.path.exists(args.img):
@@ -64,7 +71,7 @@ def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
     raise Exception(f"No response after {round(end - begin, 2)}s")
 
 
-def firmware_update(img_path: str) -> None:
+def firmware_update(img_path: str, boot_device: str) -> None:
     img = os.path.basename(img_path)
     logger.info(f"firmware updating (image {repr(img)})")
 
@@ -107,8 +114,11 @@ def firmware_update(img_path: str) -> None:
         ser.send(KEY_ENTER)
         ser.expect("Bytes transferred", 100)
         time.sleep(1)
-        logger.info("set to secondary SPI flash")
-        ser.send("sf probe 1:0")
+        logger.info(f"set to {boot_device} SPI flash")
+        if boot_device == "primary":
+            ser.send("sf probe 0:0")
+        else:
+            ser.send("sf probe 1:0")
         ser.send(KEY_ENTER)
         ser.expect("SF: Detected", 10)
         time.sleep(1)
@@ -162,7 +172,7 @@ def main() -> None:
     print("Starting FW Update")
     print("Resetting card")
     reset()
-    firmware_update(args.img)
+    firmware_update(args.img, args.boot_device)
     print("Terminating http, tftp, and dhcpd")
     for e in children:
         e.terminate()
