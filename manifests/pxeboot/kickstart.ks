@@ -188,9 +188,11 @@ if [ "@__DEFAULT_EXTRA_PACKAGES__@" = 1 ] ; then
             # The rhel-9 kernel currently lacks patches for the Marvell DPU. Install
             # a rebuild of upstream netnet kernel (with a rhel-9.4 config).
             EXTRA_PACKAGES+=(
-                "http://file.brq.redhat.com/~thaller/marvell-octeon-10-tools/kernel-6.13.0_rc1.octeontx2_1_3d64c3d3c6d8+-1/kernel-6.13.0_rc1.octeontx2_1_3d64c3d3c6d8+-1.aarch64.rpm"
-                "http://file.brq.redhat.com/~thaller/marvell-octeon-10-tools/kernel-6.13.0_rc1.octeontx2_1_3d64c3d3c6d8+-1/kernel-devel-6.13.0_rc1.octeontx2_1_3d64c3d3c6d8+-1.aarch64.rpm"
-                "http://file.brq.redhat.com/~thaller/marvell-octeon-10-tools/kernel-6.13.0_rc1.octeontx2_1_3d64c3d3c6d8+-1/kernel-headers-6.13.0_rc1.octeontx2_1_3d64c3d3c6d8+-1.aarch64.rpm"
+                "https://s3.amazonaws.com/arr-cki-prod-trusted-artifacts/trusted-artifacts/1649168171/publish_aarch64/9001088194/artifacts/repo/5.14.0-558.6271_1649167940.el9.aarch64/kernel-5.14.0-558.6271_1649167940.el9.aarch64.rpm"
+                "https://s3.amazonaws.com/arr-cki-prod-trusted-artifacts/trusted-artifacts/1649168171/publish_aarch64/9001088194/artifacts/repo/5.14.0-558.6271_1649167940.el9.aarch64/kernel-core-5.14.0-558.6271_1649167940.el9.aarch64.rpm"
+                "https://s3.amazonaws.com/arr-cki-prod-trusted-artifacts/trusted-artifacts/1649168171/publish_aarch64/9001088194/artifacts/repo/5.14.0-558.6271_1649167940.el9.aarch64/kernel-modules-5.14.0-558.6271_1649167940.el9.aarch64.rpm"
+                "https://s3.amazonaws.com/arr-cki-prod-trusted-artifacts/trusted-artifacts/1649168171/publish_aarch64/9001088194/artifacts/repo/5.14.0-558.6271_1649167940.el9.aarch64/kernel-modules-core-5.14.0-558.6271_1649167940.el9.aarch64.rpm"
+                "https://s3.amazonaws.com/arr-cki-prod-trusted-artifacts/trusted-artifacts/1649168171/publish_aarch64/9001088194/artifacts/repo/5.14.0-558.6271_1649167940.el9.aarch64/kernel-modules-extra-5.14.0-558.6271_1649167940.el9.aarch64.rpm"
             )
             ;;
         *)
