@@ -132,14 +132,14 @@ def detect_host_mode(host_path: str, host_mode: str) -> str:
 
 
 def wait_for_boot() -> None:
-    print(f"Wait for boot and IP address {common_dpu.dpu_ip4addr}")
+    logger.info(f"Wait for boot and IP address {common_dpu.dpu_ip4addr}")
     end = time.monotonic() + 1800
     sleep_time = 60
     while True:
         time.sleep(sleep_time)
         sleep_time = max(int(sleep_time / 1.3), 9)
         if common_dpu.ping(common_dpu.dpu_ip4addr):
-            print(f"got response from {common_dpu.dpu_ip4addr}")
+            logger.info(f"got response from {common_dpu.dpu_ip4addr}")
             break
         if time.monotonic() > end:
             raise RuntimeError(
@@ -352,9 +352,9 @@ def setup_http(
 
 
 def setup_tftp() -> None:
-    print("Configuring TFTP")
+    logger.info("Configuring TFTP")
     os.makedirs("/var/lib/tftpboot/pxelinux", exist_ok=True)
-    print("starting in.tftpd")
+    logger.info("starting in.tftpd")
     host.local.run("killall in.tftpd")
     p = common_dpu.run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     children.append(p)
@@ -415,7 +415,7 @@ def prepare_host(
 
 
 def setup_dhcp() -> None:
-    print("Configuring DHCP")
+    logger.info("Configuring DHCP")
     shutil.copy(
         common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"), "/etc/dhcp/dhcpd.conf"
     )
@@ -437,7 +437,7 @@ def mount_iso(iso_path: str) -> None:
 def main() -> None:
     args = parse_args()
     host_mode = detect_host_mode(args.host_path, args.host_mode)
-    print("Preparing services for Pxeboot")
+    logger.info("Preparing services for Pxeboot")
     ssh_pubkey = prepare_host(host_mode, args.dev, args.host_path, args.ssh_key)
 
     if not args.host_setup_only:
@@ -456,30 +456,30 @@ def main() -> None:
             args.extra_package,
             args.default_extra_packages,
         )
-        print("Giving services time to settle")
+        logger.info("Giving services time to settle")
         time.sleep(10)
         if args.prompt:
             input(
                 "dhcp/tftp/http services started. Waiting. Press ENTER to continue or abort with CTRL+C"
             )
-        print("Starting UEFI PXE Boot")
-        print("Resetting card")
+        logger.info("Starting UEFI PXE Boot")
+        logger.info("Resetting card")
         reset()
         select_pxe_entry()
         wait_for_boot()
 
     post_pxeboot(host_mode, args.host_path, args.dpu_name)
 
-    print("Terminating http, tftp, and dhcpd")
+    logger.info("Terminating http, tftp, and dhcpd")
     for e in children:
         e.terminate()
 
     if args.host_setup_only:
-        print("SUCCESS (host-setup-only). Try `ssh root@dpu`")
+        logger.info("SUCCESS (host-setup-only). Try `ssh root@dpu`")
     elif host_mode == "rhel":
-        print("SUCCESS. Try `ssh root@dpu`")
+        logger.info("SUCCESS. Try `ssh root@dpu`")
     else:
-        print(f"SUCCESS. Try `ssh root@{common_dpu.dpu_ip4addr}`")
+        logger.info(f"SUCCESS. Try `ssh root@{common_dpu.dpu_ip4addr}`")
 
 
 if __name__ == "__main__":

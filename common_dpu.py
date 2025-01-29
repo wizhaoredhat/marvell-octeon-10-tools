@@ -40,7 +40,7 @@ class Result:
 
 
 def run(cmd: str, env: dict[str, str] = os.environ.copy()) -> Result:
-    print(f"running {cmd}")
+    logger.info(f"running {cmd}")
     args = shlex.split(cmd)
     res = subprocess.run(
         args,
@@ -54,7 +54,7 @@ def run(cmd: str, env: dict[str, str] = os.environ.copy()) -> Result:
         returncode=res.returncode,
     )
 
-    print(f"Result: {result.out}\n{result.err}\n{result.returncode}\n")
+    logger.info(f"Result: {result.out}\n{result.err}\n{result.returncode}\n")
     return result
 
 

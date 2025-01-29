@@ -94,7 +94,7 @@ def prepare_image(boot_device: str, img: typing.Optional[str]) -> str:
 
 
 def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
-    print("Waiting for response from ping")
+    logger.info("Waiting for response from ping")
     begin = time.time()
     end = begin
     hn = list(hn)
@@ -169,9 +169,9 @@ def firmware_update(img_path: str, boot_device: str) -> None:
 
 
 def setup_tftp(img: str) -> None:
-    print("Configuring TFTP")
+    logger.info("Configuring TFTP")
     os.makedirs("/var/lib/tftpboot", exist_ok=True)
-    print("starting in.tftpd")
+    logger.info("starting in.tftpd")
     host.local.run("killall in.tftpd")
     p = run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     children.append(p)
@@ -179,7 +179,7 @@ def setup_tftp(img: str) -> None:
 
 
 def setup_dhcp(dev: str) -> None:
-    print("Configuring DHCP")
+    logger.info("Configuring DHCP")
     host.local.run(f"ip addr add 172.131.100.1/24 dev {shlex.quote(dev)}")
     shutil.copy(
         common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"),
@@ -195,10 +195,10 @@ def setup_dhcp(dev: str) -> None:
 def main() -> None:
     args = parse_args()
     img = prepare_image(args.boot_device, args.img)
-    print("Preparing services for FW update")
+    logger.info("Preparing services for FW update")
     setup_dhcp(args.dev)
     setup_tftp(img)
-    print("Giving services time to settle")
+    logger.info("Giving services time to settle")
     time.sleep(10)
 
     if args.prompt:
@@ -206,11 +206,11 @@ def main() -> None:
             "dhcp/tftp/http services started. Waiting. Press ENTER to continue or abort with CTRL+C"
         )
 
-    print("Starting FW Update")
-    print("Resetting card")
+    logger.info("Starting FW Update")
+    logger.info("Resetting card")
     reset()
     firmware_update(img, args.boot_device)
-    print("Terminating http, tftp, and dhcpd")
+    logger.info("Terminating http, tftp, and dhcpd")
     for e in children:
         e.terminate()
 
