@@ -5,6 +5,7 @@ import os
 import shlex
 import shutil
 import time
+import typing
 
 from collections.abc import Iterable
 
@@ -20,6 +21,13 @@ from common_dpu import run_process
 from reset import reset
 
 
+DEFAULT_IMG_UBOOT = (
+    "http://file.brq.redhat.com/~thaller/marvell-sdk/flash-cn10ka-SDK11.24.03.img"
+)
+DEFAULT_IMG_UEFI = (
+    "http://file.brq.redhat.com/~thaller/marvell-sdk/flash-uefi-cn10ka-SDK11.23.11.img"
+)
+
 children = []
 
 
@@ -28,7 +36,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "img",
         type=str,
-        help="Mandatory argument of type string for IMG file (make sure the path to this file was mounted when running the pod via -v /host/img:/container/img).",
+        nargs="?",
+        default=None,
+        help=f'IMG file with firmware. For path names, make sure the path is reachable from inside the container (e.g. run `podman -v /:/host`). This can also be a HTTP/HTTPS URL. The special words "uboot" (for "{DEFAULT_IMG_UBOOT}" and "uefi" (for "{DEFAULT_IMG_UEFI}") are supported. The default depends on "--boot-device" and is "uboot" (for "primary") or "uefi" (for "secondary").',
     )
     parser.add_argument(
         "--dev",
@@ -36,17 +46,55 @@ def parse_args() -> argparse.Namespace:
         default="eno4",
         help="Optional argument of type string for device. Default is 'eno4'.",
     )
+    parser.add_argument(
+        "--prompt",
+        action="store_true",
+        help="If set, start DHCP/TFTP/HTTP services and wait for the user to press ENTER. This can be used to manually setup the host side serving the firmware.",
+    )
+    parser.add_argument(
+        "-B",
+        "--boot-device",
+        choices=["primary", "secondary"],
+        default="secondary",
+        help='Select primary or secondary boot device. Defaults to "secondary".',
+    )
 
     args = parser.parse_args()
-    if not os.path.exists(args.img):
-        print(f"Couldn't read img file {args.img}")
-        raise Exception("Invalid path to omg provided")
 
     return args
 
 
+def prepare_image(boot_device: str, img: typing.Optional[str]) -> str:
+    if not img:
+        if boot_device == "primary":
+            img = "uboot"
+        else:
+            img = "uefi"
+
+    if img == "uboot":
+        img = DEFAULT_IMG_UBOOT
+    elif img == "uefi":
+        img = DEFAULT_IMG_UEFI
+
+    if img.startswith("http://") or img.startswith("https://"):
+        img2 = "/tmp/fwupdate.img"
+        logger.info(f"downloading {repr(img)} to {repr(img2)}.")
+        host.local.run(
+            ["curl", "-k", "-L", "-o", img2, img],
+            die_on_error=True,
+        )
+        img = img2
+    else:
+        logger.info(f"using image {repr(img)}.")
+
+    if not os.path.exists(img):
+        logger.error(f"Couldn't find img file {shlex.quote(img)}")
+        raise Exception(f"Invalid image path {shlex.quote(img)}")
+    return img
+
+
 def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
-    print("Waiting for response from ping")
+    logger.info("Waiting for response from ping")
     begin = time.time()
     end = begin
     hn = list(hn)
@@ -59,7 +107,7 @@ def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
     raise Exception(f"No response after {round(end - begin, 2)}s")
 
 
-def firmware_update(img_path: str) -> None:
+def firmware_update(img_path: str, boot_device: str) -> None:
     img = os.path.basename(img_path)
     logger.info(f"firmware updating (image {repr(img)})")
 
@@ -102,8 +150,11 @@ def firmware_update(img_path: str) -> None:
         ser.send(KEY_ENTER)
         ser.expect("Bytes transferred", 100)
         time.sleep(1)
-        logger.info("set to secondary SPI flash")
-        ser.send("sf probe 1:0")
+        logger.info(f"set to {boot_device} SPI flash")
+        if boot_device == "primary":
+            ser.send("sf probe 0:0")
+        else:
+            ser.send("sf probe 1:0")
         ser.send(KEY_ENTER)
         ser.expect("SF: Detected", 10)
         time.sleep(1)
@@ -118,9 +169,9 @@ def firmware_update(img_path: str) -> None:
 
 
 def setup_tftp(img: str) -> None:
-    print("Configuring TFTP")
+    logger.info("Configuring TFTP")
     os.makedirs("/var/lib/tftpboot", exist_ok=True)
-    print("starting in.tftpd")
+    logger.info("starting in.tftpd")
     host.local.run("killall in.tftpd")
     p = run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     children.append(p)
@@ -128,7 +179,7 @@ def setup_tftp(img: str) -> None:
 
 
 def setup_dhcp(dev: str) -> None:
-    print("Configuring DHCP")
+    logger.info("Configuring DHCP")
     host.local.run(f"ip addr add 172.131.100.1/24 dev {shlex.quote(dev)}")
     shutil.copy(
         common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"),
@@ -143,16 +194,23 @@ def setup_dhcp(dev: str) -> None:
 
 def main() -> None:
     args = parse_args()
-    print("Preparing services for FW update")
+    img = prepare_image(args.boot_device, args.img)
+    logger.info("Preparing services for FW update")
     setup_dhcp(args.dev)
-    setup_tftp(args.img)
-    print("Giving services time to settle")
+    setup_tftp(img)
+    logger.info("Giving services time to settle")
     time.sleep(10)
-    print("Starting FW Update")
-    print("Resetting card")
+
+    if args.prompt:
+        input(
+            "dhcp/tftp/http services started. Waiting. Press ENTER to continue or abort with CTRL+C"
+        )
+
+    logger.info("Starting FW Update")
+    logger.info("Resetting card")
     reset()
-    firmware_update(args.img)
-    print("Terminating http, tftp, and dhcpd")
+    firmware_update(img, args.boot_device)
+    logger.info("Terminating http, tftp, and dhcpd")
     for e in children:
         e.terminate()
 
