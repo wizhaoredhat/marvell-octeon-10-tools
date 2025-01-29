@@ -6,6 +6,10 @@ IMAGE=quay.io/sdaniele/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" <cmd>
 ```
 
+## PXE Booting RHEL on Marvell DPU
+
+See [pxe_boot_rhel.md](pxe_boot_rhel.md).
+
 ## Tools
 
 ### Reset
@@ -93,3 +97,25 @@ IMAGE=quay.io/sdaniele/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools-cp-agent -v /:/host -v /dev:/dev -it "$IMAGE" \
   run_octep_cp_agent
 ```
+
+### Known Problems
+
+- Various commands access the serial console at "/dev/ttyUSB[01]". As only one process
+  at a time can access the serial console, make sure to not run other minicom processes
+  in parallel.
+
+- Sometimes pxeboot command hangs. The tool reboots the machine and expects the
+  DPU to contact the DHCP/TFTP/HTTP services. Usually, 1-2 minutes after
+  selecting the boot entry, we expect logging messages about "GET" requests. If
+  that doesn't happen and you see lines about ping failures (that are normal
+  while we wait for the DPU to be booted into the installed system), you
+  encountered the problem. Abort the command and start again.
+
+- Sometimes for pxeboot/fwupdate commands, dhcpd fails to start. The dhcpd
+  process exits right away with a "Error getting hardware address for "vip": No
+  such device" message and the boot fails (as no DHCP address is provided).
+  In that case, `ip -d addr` also shows an address with label "vip".
+  It's not clear to me who creates this address, but its label interferes with
+  `ifconfig` and `dhcpd` programs.
+  Run `$ ip addr del 192.168.122.101/32 dev br-ex scope global label vip ; ip addr add 192.168.122.101/32 dev br-ex scope global`
+  and retry.
