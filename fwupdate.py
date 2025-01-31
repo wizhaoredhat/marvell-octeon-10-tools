@@ -22,10 +22,10 @@ from reset import reset
 
 
 DEFAULT_IMG_UBOOT = (
-    "http://file.brq.redhat.com/~thaller/marvell-sdk/flash-cn10ka-SDK11.24.03.img"
+    "http://file.brq.redhat.com/~thaller/marvell-sdk/flash-cn10ka-SDK12.25.01.img"
 )
 DEFAULT_IMG_UEFI = (
-    "http://file.brq.redhat.com/~thaller/marvell-sdk/flash-uefi-cn10ka-SDK11.23.11.img"
+    "http://file.brq.redhat.com/~thaller/marvell-sdk/flash-uefi-cn10ka-12.25.01.img"
 )
 
 children = []
