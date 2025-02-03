@@ -204,6 +204,11 @@ def select_pxe_entry() -> None:
             # time.sleep(1)
             # timeout = 30
 
+        # Read and log the output for a bit longer. This way, we see how the
+        # DPU starts installation.
+        ser.expect(pattern=None, timeout=60)
+        logger.info(f"Closing serial console {ser.port}")
+
 
 def write_hosts_entry(host_path: str, dpu_name: str) -> None:
     common.etc_hosts_update_file(
