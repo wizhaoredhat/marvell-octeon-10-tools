@@ -14,7 +14,6 @@ from ktoolbox import host
 
 import common_dpu
 
-from common_dpu import ESC
 from common_dpu import KEY_ENTER
 from common_dpu import logger
 from common_dpu import run_process
@@ -123,8 +122,8 @@ def firmware_update(img_path: str, boot_device: str) -> None:
         ser.send("1")
         logger.info("waiting to escape to uboot menu")
         ser.expect("Hit any key to stop autoboot", 60)
-        logger.info("Sending escape 5 times")
-        ser.send(ESC * 5)
+        logger.info("Press ENTER for uboot menu")
+        ser.send(KEY_ENTER)
         logger.info("waiting on uboot prompt")
         ser.expect("crb106-pcie>", 5)
         logger.info("enabling 100G management port")
