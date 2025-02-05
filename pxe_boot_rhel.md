@@ -133,7 +133,7 @@ Firstly, download the RHEL iso from your RH subscription. Note that you need the
 
 ```bash
 # E.g. $ISO_PATH = ~/RHEL-9.2.0-aarch64-dvd1.iso
-#      $MNT_ISO_PATH = /mnt/rhel
+#      $MNT_ISO_PATH = /mnt/rhel_iso
 mount -t iso9660 -o loop $ISO_PATH $MNT_ISO_PATH
 ```
 
