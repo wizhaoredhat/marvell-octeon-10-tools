@@ -145,6 +145,9 @@ def ssh_read_pubkey(ssh_privkey_file: str) -> str:
     raise RuntimeError('failure to read SSH public key from "{ssh_pubkey_file}"')
 
 
+DEFAULT_RHEL_ISO = "9.6"
+
+
 def create_iso_file(iso: str, chroot_path: str) -> str:
 
     iso0 = iso
@@ -155,7 +158,7 @@ def create_iso_file(iso: str, chroot_path: str) -> str:
         rhel_version = iso0[len("rhel:") :]
         if rhel_version == "":
             # This is the default.
-            rhel_version = "9.6"
+            rhel_version = DEFAULT_RHEL_ISO
         url = f"https://download.eng.bos.redhat.com/rhel-9/nightly/RHEL-9/latest-RHEL-{rhel_version}.0/compose/BaseOS/aarch64/iso/"
         res = host.local.run(
             f'curl -k -s {shlex.quote(url)} | sed -n \'s/.*href="\\(RHEL-[^"]\\+-dvd1.iso\\)".*/\\1/p\' | head -n1',

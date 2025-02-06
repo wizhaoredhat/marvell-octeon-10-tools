@@ -32,8 +32,8 @@ def parse_args() -> argparse.Namespace:
         "iso",
         type=str,
         nargs="?",
-        default="rhel:9.4",
-        help='Select the RHEL ISO to install. This can be a file name (make sure to map the host with `-v /:/host` and specify the path name starting with "/host"); it can be a HTTP URL (in which case the file will be downloaded to /host/root/rhel-iso-$NAME if such file does not exist yet); it can also be "rhel:9.x" which will automatically detect the right HTTP URL to download the latest iso. Default: "rhel:" to choose a recent RHEL version',
+        default="rhel:",
+        help=f'Select the RHEL ISO to install. This can be a file name (make sure to map the host with `-v /:/host` and specify the path name starting with "/host"); it can be a HTTP URL (in which case the file will be downloaded to /host/root/rhel-iso-$NAME if such file does not exist yet); it can also be "rhel:9.x" which will automatically detect the right HTTP URL to download the latest iso. Default: "rhel:" to choose RHEL version {common_dpu.DEFAULT_RHEL_ISO}.',
     )
     parser.add_argument(
         "--dev",
