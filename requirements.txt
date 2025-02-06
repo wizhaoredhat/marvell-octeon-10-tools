@@ -1,4 +1,4 @@
 PyYAML
 paramiko
 pyserial
-git+https://github.com/thom311/ktoolbox@6b914787314fff0b6d0b4d9e759cdea92967f4bc
+git+https://github.com/thom311/ktoolbox@1a63c03fe2b8cf09abf0ade52361340b7b43c987
