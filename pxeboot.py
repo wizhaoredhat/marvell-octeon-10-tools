@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
 import argparse
-import http.server
 import os
 import shlex
 import shutil
+import sys
 import time
 
-from multiprocessing import Process
 from typing import Optional
 
 from ktoolbox import common
@@ -22,7 +21,6 @@ from common_dpu import logger
 from reset import reset
 
 
-children = []
 iso_mount_path = "/mnt/marvel_dpu_iso"
 
 
@@ -344,16 +342,16 @@ def setup_http(
         default_extra_packages,
     )
 
-    def http_server() -> None:
-        os.chdir("/www")
-        server_address = (common_dpu.host_ip4addr, 24380)
-        handler = http.server.SimpleHTTPRequestHandler
-        httpd = http.server.HTTPServer(server_address, handler)
-        httpd.serve_forever()
-
-    p = Process(target=http_server)
-    p.start()
-    children.append(p)
+    common_dpu.run_process(
+        [
+            sys.executable,
+            "-m",
+            "http.server",
+            "-d",
+            "/www",
+            "24380",
+        ]
+    )
 
 
 def setup_tftp() -> None:
@@ -361,8 +359,7 @@ def setup_tftp() -> None:
     os.makedirs("/var/lib/tftpboot/pxelinux", exist_ok=True)
     logger.info("starting in.tftpd")
     host.local.run("killall in.tftpd")
-    p = common_dpu.run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
-    children.append(p)
+    common_dpu.run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     shutil.copy(
         f"{iso_mount_path}/images/pxeboot/vmlinuz", "/var/lib/tftpboot/pxelinux"
     )
@@ -425,10 +422,9 @@ def setup_dhcp() -> None:
         common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"), "/etc/dhcp/dhcpd.conf"
     )
     host.local.run("killall dhcpd")
-    p = common_dpu.run_process(
+    common_dpu.run_process(
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
     )
-    children.append(p)
 
 
 def mount_iso(iso_path: str) -> None:
@@ -476,8 +472,7 @@ def main() -> None:
     post_pxeboot(host_mode, args.host_path, args.dpu_name)
 
     logger.info("Terminating http, tftp, and dhcpd")
-    for e in children:
-        e.terminate()
+    common.thread_list_join_all()
 
     if args.host_setup_only:
         logger.info("SUCCESS (host-setup-only). Try `ssh root@dpu`")
