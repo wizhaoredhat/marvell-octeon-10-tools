@@ -44,6 +44,7 @@ def parse_args() -> argparse.Namespace:
         help="Optional argument of type string for device. Default is 'eno4'.",
     )
     parser.add_argument(
+        "-P",
         "--prompt",
         action="store_true",
         help="If set, start DHCP/TFTP/HTTP services and wait for the user to press ENTER. This can be used to manually setup the host side serving the firmware.",
@@ -51,12 +52,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-B",
         "--boot-device",
-        choices=["primary", "secondary"],
+        choices=["1", "2", "primary", "secondary"],
         default="secondary",
         help='Select primary or secondary boot device. Defaults to "secondary".',
     )
 
     args = parser.parse_args()
+
+    if args.boot_device == "1":
+        args.boot_device = "primary"
+    elif args.boot_device == "2":
+        args.boot_device = "secondary"
 
     return args
 

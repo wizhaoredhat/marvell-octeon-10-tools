@@ -93,6 +93,7 @@ def parse_args() -> argparse.Namespace:
         help='If set, configure ipv4.gateway on the "enP2p2s0-dpu-secondary" (requires "--nm-secondary-ip-address"). This should be in the same subnet as the address.',
     )
     parser.add_argument(
+        "-P",
         "--prompt",
         action="store_true",
         help="If set, start DHCP/TFTP/HTTP services and wait for the user to press ENTER. This can be used to manually boot via PXE.",
