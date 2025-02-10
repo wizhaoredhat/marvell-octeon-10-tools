@@ -170,7 +170,7 @@ def setup_tftp(img: str) -> None:
     os.makedirs("/var/lib/tftpboot", exist_ok=True)
     logger.info("starting in.tftpd")
     host.local.run("killall in.tftpd")
-    run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
+    run_process("tftpd", "/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     shutil.copy(f"{img}", "/var/lib/tftpboot")
 
 
@@ -182,7 +182,10 @@ def setup_dhcp(dev: str) -> None:
         "/etc/dhcp/dhcpd.conf",
     )
     host.local.run("killall dhcpd")
-    run_process("/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd")
+    run_process(
+        "dhcpd",
+        "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd",
+    )
 
 
 def main() -> None:
@@ -192,7 +195,9 @@ def main() -> None:
     setup_dhcp(args.dev)
     setup_tftp(img)
     logger.info("Giving services time to settle")
-    time.sleep(10)
+    time.sleep(3)
+
+    common_dpu.check_services_running()
 
     if args.prompt:
         input(

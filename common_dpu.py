@@ -31,12 +31,26 @@ logger = common.ExtendedLogger("marvell_toolbox")
 common.log_config_logger(logging.DEBUG, logger, "ktoolbox")
 
 
-def run_process(cmd: Union[str, Iterable[str]]) -> common.FutureThread[host.Result]:
+def run_process(
+    tag: str,
+    cmd: Union[str, Iterable[str]],
+) -> common.FutureThread[host.Result]:
     return host.local.run_in_thread(
         cmd,
         log_lineoutput=True,
         add_to_thread_list=True,
+        user_data=tag,
     )
+
+
+def check_services_running() -> None:
+    for th in common.thread_list_get():
+        assert isinstance(th, common.FutureThread)
+        if th.poll() is None:
+            continue
+        logger.error(
+            f"Service {th.user_data} unexpectedly not running. Check logging output!!"
+        )
 
 
 def ping(hn: str) -> bool:

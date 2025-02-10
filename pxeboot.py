@@ -343,6 +343,7 @@ def setup_http(
     )
 
     common_dpu.run_process(
+        "httpd",
         [
             sys.executable,
             "-m",
@@ -350,7 +351,7 @@ def setup_http(
             "-d",
             "/www",
             "24380",
-        ]
+        ],
     )
 
 
@@ -359,7 +360,7 @@ def setup_tftp() -> None:
     os.makedirs("/var/lib/tftpboot/pxelinux", exist_ok=True)
     logger.info("starting in.tftpd")
     host.local.run("killall in.tftpd")
-    common_dpu.run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
+    common_dpu.run_process("tftp", "/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     shutil.copy(
         f"{iso_mount_path}/images/pxeboot/vmlinuz", "/var/lib/tftpboot/pxelinux"
     )
@@ -423,7 +424,8 @@ def setup_dhcp() -> None:
     )
     host.local.run("killall dhcpd")
     common_dpu.run_process(
-        "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
+        "dhcpd",
+        "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd",
     )
 
 
@@ -458,7 +460,10 @@ def main() -> None:
             args.default_extra_packages,
         )
         logger.info("Giving services time to settle")
-        time.sleep(10)
+        time.sleep(3)
+
+        common_dpu.check_services_running()
+
         if args.prompt:
             input(
                 "dhcp/tftp/http services started. Waiting. Press ENTER to continue or abort with CTRL+C"
