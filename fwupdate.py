@@ -27,8 +27,6 @@ DEFAULT_IMG_UEFI = (
     "http://file.brq.redhat.com/~thaller/marvell-sdk/flash-uefi-cn10ka-12.25.01.img"
 )
 
-children = []
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Process FW IMG file.")
@@ -172,8 +170,7 @@ def setup_tftp(img: str) -> None:
     os.makedirs("/var/lib/tftpboot", exist_ok=True)
     logger.info("starting in.tftpd")
     host.local.run("killall in.tftpd")
-    p = run_process("/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
-    children.append(p)
+    run_process("tftpd", "/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
     shutil.copy(f"{img}", "/var/lib/tftpboot")
 
 
@@ -185,10 +182,10 @@ def setup_dhcp(dev: str) -> None:
         "/etc/dhcp/dhcpd.conf",
     )
     host.local.run("killall dhcpd")
-    p = run_process(
-        "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd"
+    run_process(
+        "dhcpd",
+        "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd",
     )
-    children.append(p)
 
 
 def main() -> None:
@@ -198,7 +195,9 @@ def main() -> None:
     setup_dhcp(args.dev)
     setup_tftp(img)
     logger.info("Giving services time to settle")
-    time.sleep(10)
+    time.sleep(3)
+
+    common_dpu.check_services_running()
 
     if args.prompt:
         input(
@@ -210,8 +209,7 @@ def main() -> None:
     reset()
     firmware_update(img, args.boot_device)
     logger.info("Terminating http, tftp, and dhcpd")
-    for e in children:
-        e.terminate()
+    common.thread_list_join_all()
 
 
 if __name__ == "__main__":

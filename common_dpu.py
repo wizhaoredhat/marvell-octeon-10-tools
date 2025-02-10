@@ -1,11 +1,10 @@
-import dataclasses
 import logging
 import os
 import shlex
-import subprocess
 
-from multiprocessing import Process
+from collections.abc import Iterable
 from typing import Optional
+from typing import Union
 
 from ktoolbox import common
 from ktoolbox import firewall
@@ -32,36 +31,26 @@ logger = common.ExtendedLogger("marvell_toolbox")
 common.log_config_logger(logging.DEBUG, logger, "ktoolbox")
 
 
-@dataclasses.dataclass(frozen=True)
-class Result:
-    out: str
-    err: str
-    returncode: int
-
-
-def run(cmd: str, env: dict[str, str] = os.environ.copy()) -> Result:
-    logger.info(f"running {cmd}")
-    args = shlex.split(cmd)
-    res = subprocess.run(
-        args,
-        capture_output=True,
-        env=env,
+def run_process(
+    tag: str,
+    cmd: Union[str, Iterable[str]],
+) -> common.FutureThread[host.Result]:
+    return host.local.run_in_thread(
+        cmd,
+        log_lineoutput=True,
+        add_to_thread_list=True,
+        user_data=tag,
     )
 
-    result = Result(
-        out=res.stdout.decode("utf-8"),
-        err=res.stderr.decode("utf-8"),
-        returncode=res.returncode,
-    )
 
-    logger.info(f"Result: {result.out}\n{result.err}\n{result.returncode}\n")
-    return result
-
-
-def run_process(cmd: str) -> Process:
-    p = Process(target=run, args=(cmd,))
-    p.start()
-    return p
+def check_services_running() -> None:
+    for th in common.thread_list_get():
+        assert isinstance(th, common.FutureThread)
+        if th.poll() is None:
+            continue
+        logger.error(
+            f"Service {th.user_data} unexpectedly not running. Check logging output!!"
+        )
 
 
 def ping(hn: str) -> bool:
