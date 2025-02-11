@@ -215,7 +215,7 @@ NAME=marvell-tools-cp-agent
 
 case "$CMD" in
     run)
-        podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name "$NAME" -v /:/host -v /dev:/dev -it "$IMAGE" run_octep_cp_agent
+        podman run --pull newer --rm --replace --privileged --pid host --network host --user 0 --name "$NAME" -v /:/host -v /dev:/dev -it "$IMAGE" run_octep_cp_agent
         ;;
     stop)
         podman stop "$NAME"
