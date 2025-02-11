@@ -184,16 +184,7 @@ chmod +x /etc/yum.repos.d/marvell-tools-beaker.sh
 EXTRA_PACKAGES=( @__EXTRA_PACKAGES__@ )
 if [ "@__DEFAULT_EXTRA_PACKAGES__@" = 1 ] ; then
     case "$(sed -n 's/^VERSION_ID="\(.*\)"/\1/p' /etc/os-release)" in
-        9.4|9.5|9.6)
-            # The rhel-9 kernel currently lacks patches for the Marvell DPU. Install
-            # a rebuild of upstream netnet kernel (with a rhel-9.4 config).
-            EXTRA_PACKAGES+=(
-                "https://s3.amazonaws.com/arr-cki-prod-trusted-artifacts/trusted-artifacts/1649168171/publish_aarch64/9001088194/artifacts/repo/5.14.0-558.6271_1649167940.el9.aarch64/kernel-5.14.0-558.6271_1649167940.el9.aarch64.rpm"
-                "https://s3.amazonaws.com/arr-cki-prod-trusted-artifacts/trusted-artifacts/1649168171/publish_aarch64/9001088194/artifacts/repo/5.14.0-558.6271_1649167940.el9.aarch64/kernel-core-5.14.0-558.6271_1649167940.el9.aarch64.rpm"
-                "https://s3.amazonaws.com/arr-cki-prod-trusted-artifacts/trusted-artifacts/1649168171/publish_aarch64/9001088194/artifacts/repo/5.14.0-558.6271_1649167940.el9.aarch64/kernel-modules-5.14.0-558.6271_1649167940.el9.aarch64.rpm"
-                "https://s3.amazonaws.com/arr-cki-prod-trusted-artifacts/trusted-artifacts/1649168171/publish_aarch64/9001088194/artifacts/repo/5.14.0-558.6271_1649167940.el9.aarch64/kernel-modules-core-5.14.0-558.6271_1649167940.el9.aarch64.rpm"
-                "https://s3.amazonaws.com/arr-cki-prod-trusted-artifacts/trusted-artifacts/1649168171/publish_aarch64/9001088194/artifacts/repo/5.14.0-558.6271_1649167940.el9.aarch64/kernel-modules-extra-5.14.0-558.6271_1649167940.el9.aarch64.rpm"
-            )
+        9.6)
             ;;
         *)
             ;;
