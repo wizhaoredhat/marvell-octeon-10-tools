@@ -91,6 +91,7 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
     fi && \
     rm -rf /build/
 
+ENV PATH="/marvell-octeon-10-tools:$PATH"
 WORKDIR /marvell-octeon-10-tools
 ENTRYPOINT ["/usr/bin/tini", "-s", "-p", "SIGTERM", "-g", "-e", "143", "--"]
 CMD ["/usr/bin/sleep", "infinity"]
