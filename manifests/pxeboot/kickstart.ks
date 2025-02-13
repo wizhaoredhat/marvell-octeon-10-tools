@@ -251,4 +251,6 @@ sed -i 's/.*PermitRootLogin.*/# \0\nPermitRootLogin yes/' /etc/ssh/sshd_config
 
 systemctl disable NetworkManager-wait-online.service
 
+echo 'export KUBECONFIG=/var/lib/microshift/resources/kubeadmin/kubeconfig' > /etc/profile.d/marvell-tools-kubeconfig.sh
+
 %end
