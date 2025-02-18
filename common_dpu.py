@@ -111,6 +111,7 @@ def ssh_generate_key(chroot_path: str, *, create: bool = True) -> Optional[str]:
     file = f"{chroot_path}/root/.ssh/id_ed25519"
     if not os.path.exists(file) or not os.path.exists(f"{file}.pub"):
         if not create:
+            logger.info(f"ssh-generate-key: skip creating key {repr(file)} on host")
             return None
         try:
             os.mkdir(os.path.dirname(file))
@@ -120,6 +121,9 @@ def ssh_generate_key(chroot_path: str, *, create: bool = True) -> Optional[str]:
             f'ssh-keygen -t ed25519 -C marvell-tools@local.local -N "" -f {shlex.quote(file)}',
             die_on_error=True,
         )
+        logger.info(f"ssh-generate-key: SSH key {repr(file)} created")
+    else:
+        logger.info(f"ssh-generate-key: use existing SSH key {repr(file)}")
     return file
 
 
