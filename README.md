@@ -95,7 +95,7 @@ See `/usr/bin/{octep_cp_agent,cn106xx.cfg}`. You can run:
 ```
 IMAGE=quay.io/sdaniele/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools-cp-agent -v /:/host -v /dev:/dev -it "$IMAGE" \
-  run_octep_cp_agent
+  exec_octep_cp_agent
 ```
 
 ### Known Problems

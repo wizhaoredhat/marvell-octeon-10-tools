@@ -79,14 +79,14 @@ COPY manifests/.minirc.dfl /root/
 COPY manifests/Minicom /usr/bin/
 
 COPY --from=builder-octep-cp-agent /build/ /build/
-COPY manifests/run_octep_cp_agent /build/
+COPY manifests/exec_octep_cp_agent /build/
 
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
         mv /build/libconfig-1.7.2/lib/.libs/libconfig.so* /usr/lib/ && \
         mv /build/pcie_ep_octeon_target/target/apps/octep_cp_agent/bin/bin/octep_cp_agent \
            /build/pcie_ep_octeon_target/target/apps/octep_cp_agent/cn106xx.cfg \
            /usr/bin/ && \
-        mv /build/run_octep_cp_agent /usr/bin/ && \
+        mv /build/exec_octep_cp_agent /usr/bin/ && \
         ldconfig ; \
     fi && \
     rm -rf /build/
