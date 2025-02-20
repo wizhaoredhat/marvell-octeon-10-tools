@@ -416,7 +416,7 @@ def prepare_host(
             logger.info(f"prepare-host: add host key {repr(ssh_privkey_file)}")
             ssh_pubkey.append(common_dpu.ssh_read_pubkey(ssh_privkey_file))
 
-    if ssh_pubkey:
+    if not ssh_pubkey:
         logger.info("prepare-host: no SSH keys")
     else:
         for k in ssh_pubkey:
