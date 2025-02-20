@@ -487,17 +487,12 @@ def main() -> None:
     logger.info("Terminating http, tftp, and dhcpd")
     common.thread_list_join_all()
 
-    if host_mode == "rhel":
-        dpu_addr = "dpu"
-    else:
-        dpu_addr = common_dpu.dpu_ip4addr
-
     if args.host_setup_only:
         host_setup_only = " (host-setup-only)"
     else:
         host_setup_only = ""
 
-    logger.info(f"SUCCESS{host_setup_only}. Try `ssh root@{dpu_addr}`")
+    logger.info(f"SUCCESS{host_setup_only}. Try `ssh root@{common_dpu.dpu_ip4addr}`")
 
 
 if __name__ == "__main__":
