@@ -219,8 +219,7 @@ def write_hosts_entry(host_path: str, dpu_name: str) -> None:
 
 
 def post_pxeboot(host_mode: str, host_path: str, dpu_name: str) -> None:
-    if host_mode == "rhel":
-        write_hosts_entry(host_path, dpu_name)
+    write_hosts_entry(host_path, dpu_name)
 
 
 def detect_yum_repo_url() -> str:
@@ -382,16 +381,11 @@ def prepare_host(
     host_path: str,
     ssh_key: Optional[list[str]],
 ) -> list[str]:
-    if host_mode == "rhel":
-        common_dpu.nmcli_setup_mngtiface(
-            ifname=dev,
-            chroot_path=host_path,
-            ip4addr=common_dpu.host_ip4addrnet,
-        )
-    else:
-        host.local.run(
-            f"ip addr add {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(dev)}"
-        )
+    common_dpu.nmcli_setup_mngtiface(
+        ifname=dev,
+        chroot_path=host_path,
+        ip4addr=common_dpu.host_ip4addrnet,
+    )
 
     common_dpu.nft_masquerade(ifname=dev, subnet=common_dpu.dpu_subnet)
     host.local.run("sysctl -w net.ipv4.ip_forward=1")
