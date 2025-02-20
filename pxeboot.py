@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--ssh-key",
-        nargs="+",
+        action="append",
         help='Specify SSH public keys to add to the DPU\'s /root/.ssh/authorized_keys. Can be specified multiple times. If unspecified or set to "", include "/{host-path}/root/.ssh/id_ed25519.pub" (this file will be generated with "--host-mode=rhel" if it doesn\'t exist).',
     )
     parser.add_argument(
@@ -416,7 +416,7 @@ def prepare_host(
             logger.info(f"prepare-host: add host key {repr(ssh_privkey_file)}")
             ssh_pubkey.append(common_dpu.ssh_read_pubkey(ssh_privkey_file))
 
-    if ssh_pubkey:
+    if not ssh_pubkey:
         logger.info("prepare-host: no SSH keys")
     else:
         for k in ssh_pubkey:
