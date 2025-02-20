@@ -219,8 +219,7 @@ def write_hosts_entry(host_path: str, dpu_name: str) -> None:
 
 
 def post_pxeboot(host_mode: str, host_path: str, dpu_name: str) -> None:
-    if host_mode == "rhel":
-        write_hosts_entry(host_path, dpu_name)
+    write_hosts_entry(host_path, dpu_name)
 
 
 def detect_yum_repo_url() -> str:
@@ -382,16 +381,11 @@ def prepare_host(
     host_path: str,
     ssh_key: Optional[list[str]],
 ) -> list[str]:
-    if host_mode == "rhel":
-        common_dpu.nmcli_setup_mngtiface(
-            ifname=dev,
-            chroot_path=host_path,
-            ip4addr=common_dpu.host_ip4addrnet,
-        )
-    else:
-        host.local.run(
-            f"ip addr add {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(dev)}"
-        )
+    common_dpu.nmcli_setup_mngtiface(
+        ifname=dev,
+        chroot_path=host_path,
+        ip4addr=common_dpu.host_ip4addrnet,
+    )
 
     common_dpu.nft_masquerade(ifname=dev, subnet=common_dpu.dpu_subnet)
     host.local.run("sysctl -w net.ipv4.ip_forward=1")
@@ -487,17 +481,12 @@ def main() -> None:
     logger.info("Terminating http, tftp, and dhcpd")
     common.thread_list_join_all()
 
-    if host_mode == "rhel":
-        dpu_addr = "dpu"
-    else:
-        dpu_addr = common_dpu.dpu_ip4addr
-
     if args.host_setup_only:
         host_setup_only = " (host-setup-only)"
     else:
         host_setup_only = ""
 
-    logger.info(f"SUCCESS{host_setup_only}. Try `ssh root@{dpu_addr}`")
+    logger.info(f"SUCCESS{host_setup_only}. Try `ssh root@{common_dpu.dpu_ip4addr}`")
 
 
 if __name__ == "__main__":
