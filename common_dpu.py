@@ -41,6 +41,8 @@ def run_process(
         log_lineoutput=True,
         add_to_thread_list=True,
         user_data=tag,
+        check_success=lambda r: r.cancelled,
+        log_level_fail=logging.ERROR,
     )
 
 
