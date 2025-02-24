@@ -1,6 +1,7 @@
 import logging
 import os
 import shlex
+import shutil
 
 from collections.abc import Iterable
 from typing import Optional
@@ -51,6 +52,21 @@ def check_services_running() -> None:
         logger.error_and_exit(
             f"Service {th.user_data} unexpectedly not running. Check logging output!!"
         )
+
+
+def run_dhcpd() -> None:
+    logger.info("Configuring DHCP")
+
+    shutil.copy(
+        packaged_file("manifests/pxeboot/dhcpd.conf"),
+        "/etc/dhcp/dhcpd.conf",
+    )
+
+    host.local.run("killall dhcpd")
+    run_process(
+        "dhcpd",
+        "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd",
+    )
 
 
 def ping(hn: str) -> bool:
