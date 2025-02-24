@@ -63,6 +63,16 @@ def run_dhcpd() -> None:
     )
 
     host.local.run("killall dhcpd")
+
+    # On CoreOS, br-ex tends to have an address with a "label vip". That trips
+    # up dhcpd, which uses legacy API to access addresses (compare legacy
+    # `ifconfig` vs `ip addr`).
+    #
+    # Workaround by deleting and re-adding the address.
+    host.local.run(
+        "ip addr del 192.168.122.101/32 dev br-ex scope global label vip && ip addr add 192.168.122.101/32 dev br-ex scope global"
+    )
+
     run_process(
         "dhcpd",
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd",
