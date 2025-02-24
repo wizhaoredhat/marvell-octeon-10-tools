@@ -1,6 +1,7 @@
 import logging
 import os
 import shlex
+import shutil
 
 from collections.abc import Iterable
 from typing import Optional
@@ -40,6 +41,8 @@ def run_process(
         log_lineoutput=True,
         add_to_thread_list=True,
         user_data=tag,
+        check_success=lambda r: r.cancelled,
+        log_level_fail=logging.ERROR,
     )
 
 
@@ -48,9 +51,34 @@ def check_services_running() -> None:
         assert isinstance(th, common.FutureThread)
         if th.poll() is None:
             continue
-        logger.error(
+        logger.error_and_exit(
             f"Service {th.user_data} unexpectedly not running. Check logging output!!"
         )
+
+
+def run_dhcpd() -> None:
+    logger.info("Configuring DHCP")
+
+    shutil.copy(
+        packaged_file("manifests/pxeboot/dhcpd.conf"),
+        "/etc/dhcp/dhcpd.conf",
+    )
+
+    host.local.run("killall dhcpd")
+
+    # On CoreOS, br-ex tends to have an address with a "label vip". That trips
+    # up dhcpd, which uses legacy API to access addresses (compare legacy
+    # `ifconfig` vs `ip addr`).
+    #
+    # Workaround by deleting and re-adding the address.
+    host.local.run(
+        "ip addr del 192.168.122.101/32 dev br-ex scope global label vip && ip addr add 192.168.122.101/32 dev br-ex scope global"
+    )
+
+    run_process(
+        "dhcpd",
+        "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd",
+    )
 
 
 def ping(hn: str) -> bool:

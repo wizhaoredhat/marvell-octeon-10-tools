@@ -181,17 +181,8 @@ def setup_tftp(img: str) -> None:
 
 
 def setup_dhcp(dev: str) -> None:
-    logger.info("Configuring DHCP")
     host.local.run(f"ip addr add 172.131.100.1/24 dev {shlex.quote(dev)}")
-    shutil.copy(
-        common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"),
-        "/etc/dhcp/dhcpd.conf",
-    )
-    host.local.run("killall dhcpd")
-    run_process(
-        "dhcpd",
-        "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd",
-    )
+    common_dpu.run_dhcpd()
 
 
 def main() -> None:
