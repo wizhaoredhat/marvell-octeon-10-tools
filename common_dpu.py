@@ -48,7 +48,7 @@ def check_services_running() -> None:
         assert isinstance(th, common.FutureThread)
         if th.poll() is None:
             continue
-        logger.error(
+        logger.error_and_exit(
             f"Service {th.user_data} unexpectedly not running. Check logging output!!"
         )
 
