@@ -99,6 +99,18 @@ def parse_args() -> argparse.Namespace:
         help="If set, start DHCP/TFTP/HTTP services and wait for the user to press ENTER. This can be used to manually boot via PXE.",
     )
     parser.add_argument(
+        "--octep-cp-agent-service-enable",
+        action="store_true",
+        default=True,
+        help='The opposite of "--octep-cp-agent-service-disable".',
+    )
+    parser.add_argument(
+        "--octep-cp-agent-service-disable",
+        action="store_false",
+        dest="octep_cp_agent_service_enable",
+        help='The tool will always create a "octep_cp_agent.service". By default this service is enabled and running. Use this flag to disable the service.',
+    )
+    parser.add_argument(
         "-i",
         "--extra-package",
         default=[],
@@ -255,6 +267,7 @@ def copy_kickstart(
     dpu_name: str,
     ssh_pubkey: list[str],
     yum_repos: str,
+    octep_cp_agent_service_enable: bool,
     nm_secondary_cloned_mac_address: str,
     nm_secondary_ip_address: str,
     nm_secondary_ip_gateway: str,
@@ -290,7 +303,8 @@ def copy_kickstart(
         "@__YUM_REPO_URL__@", shlex.quote(detect_yum_repo_url())
     )
     kickstart = kickstart.replace(
-        "@__YUM_REPO_ENABLED__@", shlex.quote("1" if yum_repo_enabled else "0")
+        "@__YUM_REPO_ENABLED__@",
+        common.bool_to_str(yum_repo_enabled, format="1"),
     )
     kickstart = kickstart.replace(
         "@__EXTRA_PACKAGES__@",
@@ -299,6 +313,10 @@ def copy_kickstart(
     kickstart = kickstart.replace(
         "@__DEFAULT_EXTRA_PACKAGES__@",
         "1" if default_extra_packages else "0",
+    )
+    kickstart = kickstart.replace(
+        "@__OCTEP_CP_AGENT_SERVICE_ENABLE__@",
+        common.bool_to_str(octep_cp_agent_service_enable, format="1"),
     )
 
     res = host.local.run(
@@ -322,6 +340,7 @@ def setup_http(
     dpu_name: str,
     ssh_pubkey: list[str],
     yum_repos: str,
+    octep_cp_agent_service_enable: bool,
     nm_secondary_cloned_mac_address: str,
     nm_secondary_ip_address: str,
     nm_secondary_ip_gateway: str,
@@ -336,6 +355,7 @@ def setup_http(
         dpu_name,
         ssh_pubkey,
         yum_repos,
+        octep_cp_agent_service_enable,
         nm_secondary_cloned_mac_address,
         nm_secondary_ip_address,
         nm_secondary_ip_gateway,
@@ -461,6 +481,7 @@ def main() -> None:
             args.dpu_name,
             ssh_pubkey,
             args.yum_repos,
+            args.octep_cp_agent_service_enable,
             args.nm_secondary_cloned_mac_address,
             args.nm_secondary_ip_address,
             args.nm_secondary_ip_gateway,

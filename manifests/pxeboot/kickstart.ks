@@ -238,7 +238,9 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable octep_cp_agent.service
+if [ "@__OCTEP_CP_AGENT_SERVICE_ENABLE__@" = 1 ] ; then
+  systemctl enable octep_cp_agent.service
+fi
 
 ################################################################################
 
