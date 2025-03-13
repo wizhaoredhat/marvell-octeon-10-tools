@@ -58,9 +58,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--host-mode",
-        choices=["auto", "rhel", "coreos"],
+        choices=["auto", "rhel", "coreos", "ephemeral"],
         default="auto",
-        help='How to treat the host. With "rhel" we configure a (persisted) NetworkManager connection profile for device (eno4). With "coreos", this only configures an ad-hoc IP address with iproute. Port forwarding is always ephemeral via nft rules.',
+        help='How to treat the host. With "rhel" and "coreos" we configure a (persisted) NetworkManager connection profile for device (eno4). With "ephemeral"", this only configures an ad-hoc IP address with iproute. Port forwarding is always ephemeral via nft rules.',
     )
     parser.add_argument(
         "-H",
@@ -72,7 +72,7 @@ def parse_args() -> argparse.Namespace:
         "--dpu-name",
         type=str,
         default="marvell-dpu",
-        help='The static hostname of the DPU. Defaults to "marvell-dpu". With "--host-mode=rhel" this is also added to /etc/hosts alongside "dpu".',
+        help='The static hostname of the DPU. Defaults to "marvell-dpu". With "--host-mode" set to "rhel" or "coreos", this is also added to /etc/hosts alongside "dpu".',
     )
     parser.add_argument(
         "--nm-secondary-cloned-mac-address",
@@ -219,7 +219,7 @@ def write_hosts_entry(host_path: str, dpu_name: str) -> None:
 
 
 def post_pxeboot(host_mode: str, host_path: str, dpu_name: str) -> None:
-    if host_mode == "rhel":
+    if host_mode in ("rhel", "coreos"):
         write_hosts_entry(host_path, dpu_name)
 
 
@@ -382,7 +382,7 @@ def prepare_host(
     host_path: str,
     ssh_key: Optional[list[str]],
 ) -> list[str]:
-    if host_mode == "rhel":
+    if host_mode in ("rhel", "coreos"):
         common_dpu.nmcli_setup_mngtiface(
             ifname=dev,
             chroot_path=host_path,
@@ -487,17 +487,12 @@ def main() -> None:
     logger.info("Terminating http, tftp, and dhcpd")
     common.thread_list_join_all()
 
-    if host_mode == "rhel":
-        dpu_addr = "dpu"
-    else:
-        dpu_addr = common_dpu.dpu_ip4addr
-
     if args.host_setup_only:
         host_setup_only = " (host-setup-only)"
     else:
         host_setup_only = ""
 
-    logger.info(f"SUCCESS{host_setup_only}. Try `ssh root@{dpu_addr}`")
+    logger.info(f"SUCCESS{host_setup_only}. Try `ssh root@{common_dpu.dpu_ip4addr}`")
 
 
 if __name__ == "__main__":
