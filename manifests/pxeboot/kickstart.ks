@@ -63,6 +63,13 @@ podman
 
 set -x
 
+################################################################################
+
+sed -i 's/^GRUB_CMDLINE_LINUX="\(.*\)"$/GRUB_CMDLINE_LINUX="\1 default_hugepagesz=32M hugepagesz=32M hugepages=8"/' /etc/default/grub
+grub2-mkconfig -o /boot/grub2/grub.cfg
+
+################################################################################
+
 SSH_PUBKEY=@__SSH_PUBKEY__@
 if [ -n "$SSH_PUBKEY" ] ; then
     mkdir -p /root/.ssh
