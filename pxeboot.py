@@ -426,15 +426,7 @@ def prepare_host(
 
 
 def setup_dhcp() -> None:
-    logger.info("Configuring DHCP")
-    shutil.copy(
-        common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"), "/etc/dhcp/dhcpd.conf"
-    )
-    host.local.run("killall dhcpd")
-    common_dpu.run_process(
-        "dhcpd",
-        "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd",
-    )
+    common_dpu.run_dhcpd()
 
 
 def mount_iso(iso_path: str) -> None:
