@@ -1,0 +1,6 @@
+#!/bin/bash
+
+set -ex
+
+/marvell-octeon-10-tools/pxeboot.py -H
+ssh-trust-dpu
