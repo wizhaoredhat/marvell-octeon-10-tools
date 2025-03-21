@@ -1,0 +1,23 @@
+#!/bin/bash
+
+set -ex
+
+IP=172.131.100.100
+HOSTNAME=dpu
+PASSWORD=redhat
+HOST_DIR="${HOST_DIR:-/host}"
+if [ -z "$SSH_DIR" ] ; then
+  SSH_DIR="$HOST_DIR/root/.ssh"
+fi
+
+mkdir -p "$SSH_DIR"/
+touch "$SSH_DIR"/known_hosts
+
+for host in "$IP" "$HOSTNAME" ; do
+  ssh-keygen -R "$host" -f "$SSH_DIR"/known_hosts || :
+  ssh-keyscan -H "$host" >> "$SSH_DIR"/known_hosts || :
+done
+
+for key in "$SSH_DIR"/*.pub ; do
+  sshpass -p "$PASSWORD" ssh-copy-id -o StrictHostKeyChecking=no -i "$key" "root@$IP" || :
+done
