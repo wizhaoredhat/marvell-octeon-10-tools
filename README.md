@@ -57,6 +57,8 @@ The tool makes several assumptions.
   - Configures nftables (`nft list table ip marvell-tools-nat-eno4`) and "net.ipv4.ip_forward". This
     configuration is ephemeral. It can be redone after reboot with "--host-setup-only".
 
+  - see also [Host-setup](#Host-setup).
+
 
 Usage:
 ```
@@ -64,6 +66,20 @@ IMAGE=quay.io/sdaniele/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" \
   ./pxeboot.py --help
 ```
+
+### Host-setup
+
+From the host with the DPU, we call commands like `pxeboot.py` or `fwupdate.py`.
+
+We usually also want to setup that host in a way that is convenient for accessing the host.
+
+Run
+```
+IMAGE=quay.io/sdaniele/marvell-tools:latest
+sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" host-setup
+```
+
+This runs `pxeboot.py -H` and installs the ssh-key on the DPU (via `ssh-trust-dpu` script).
 
 ### FW Updater
 
