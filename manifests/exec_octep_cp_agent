@@ -3,18 +3,26 @@
 set -ex
 
 setup_hugepages() {
+    if [ "$(cat /proc/meminfo | sed -n 's/^Hugepagesize: *//p')" != "32768 kB" ] ; then
+        # octeon_cp_agent requires hugepages aligned to 4M. To achived that,
+        # ensure to use 32M hugepages (via default_hugepagesz=32M boot cmdline).
+        echo "WARNING: hugepage size not as expected 32M."
+        cat /proc/meminfo
+    fi
+    if [ "$(cat /proc/sys/vm/nr_hugepages)" -lt 32 ] ; then
+        echo 32 > /proc/sys/vm/nr_hugepages
+    fi
     if ! mount | grep -q "^none on /dev/huge type hugetlbfs " ; then
         mkdir -p /dev/huge
         mount -t hugetlbfs none /dev/huge
-        echo 1024 > /proc/sys/vm/nr_hugepages
     fi
 }
 
 run() {
     # from http://file.brq.redhat.com/~thaller/SDP-CP-agent.docx
     setup_hugepages
+
     chroot /host modprobe vfio-pci
-    echo 0000:06:00.0 > /sys/bus/pci/drivers/mrvl_cn10k_dpi/unbind || :
     echo vfio-pci > /sys/bus/pci/devices/0000:06:00.0/driver_override
     echo vfio-pci > /sys/bus/pci/devices/0001:00:10.0/driver_override
     echo 0000:06:00.0 > /sys/bus/pci/drivers_probe
