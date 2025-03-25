@@ -89,8 +89,11 @@ def ping(hn: str) -> bool:
     ).success
 
 
+cwd, basedir = common.path_basedir(__file__)
+
+
 def packaged_file(relative_path: str) -> str:
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
+    return common.path_norm(basedir + "/" + relative_path)
 
 
 def nmcli_setup_mngtiface(
