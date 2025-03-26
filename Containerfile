@@ -59,6 +59,7 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         python3-requests \
         python3-types-pyyaml \
         python39 \
+        sshpass \
         tcpdump \
         tftp \
         tftp-server \
@@ -77,6 +78,9 @@ COPY ./manifests /marvell-octeon-10-tools/manifests
 
 COPY manifests/.minirc.dfl /root/
 COPY manifests/Minicom /usr/bin/
+
+COPY manifests/ssh-trust-dpu /usr/bin/
+COPY manifests/host-setup /usr/bin/
 
 COPY --from=builder-octep-cp-agent /build/ /build/
 COPY manifests/exec_octep_cp_agent /build/
