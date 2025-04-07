@@ -15,9 +15,11 @@ touch "$SSH_DIR"/known_hosts
 
 for host in "$IP" "$HOSTNAME" ; do
   ssh-keygen -R "$host" -f "$SSH_DIR"/known_hosts || :
+done
+sleep 1
+for host in "$IP" "$HOSTNAME" ; do
   ssh-keyscan -H "$host" >> "$SSH_DIR"/known_hosts || :
 done
-
 for key in "$SSH_DIR"/*.pub ; do
   sshpass -p "$PASSWORD" ssh-copy-id -o StrictHostKeyChecking=no -i "$key" "root@$IP" || :
 done
