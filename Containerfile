@@ -13,7 +13,9 @@ WORKDIR /build/
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
         curl -L -k -o /build/libconfig.tar.gz https://hyperrealm.github.io/libconfig/dist/libconfig-1.7.2.tar.gz && \
         tar -C /build -xvf libconfig.tar.gz && \
-        git clone --depth=10 https://github.com/MarvellEmbeddedProcessors/pcie_ep_octeon_target.git ; \
+        git clone https://github.com/MarvellEmbeddedProcessors/pcie_ep_octeon_target.git && \
+        cd pcie_ep_octeon_target/ && \
+        git checkout -B tmp aa84a2331f76b68583e7b5861f17f5f3cef0fbd0 ; \
     fi
 
 WORKDIR /build/libconfig-1.7.2/
