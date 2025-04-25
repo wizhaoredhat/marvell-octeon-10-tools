@@ -2,26 +2,20 @@ FROM quay.io/centos/centos:stream9 AS builder-octep-cp-agent
 ARG TARGETPLATFORM
 
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
+        dnf config-manager --set-enabled crb && \
         dnf upgrade -y && \
         dnf install -y \
             g++ \
             gcc \
-            git-core ; \
+            git-core \
+            libconfig-devel ; \
     fi
 
 WORKDIR /build/
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
-        curl -L -k -o /build/libconfig.tar.gz https://hyperrealm.github.io/libconfig/dist/libconfig-1.7.2.tar.gz && \
-        tar -C /build -xvf libconfig.tar.gz && \
         git clone https://github.com/MarvellEmbeddedProcessors/pcie_ep_octeon_target.git && \
         cd pcie_ep_octeon_target/ && \
         git checkout -B tmp aa84a2331f76b68583e7b5861f17f5f3cef0fbd0 ; \
-    fi
-
-WORKDIR /build/libconfig-1.7.2/
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
-        ./configure --host=aarch64-marvell-linux-gnu && \
-        make all ; \
     fi
 
 WORKDIR /build/pcie_ep_octeon_target/target/libs/octep_cp_lib/
@@ -31,8 +25,8 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
 
 WORKDIR /build/pcie_ep_octeon_target/target/apps/octep_cp_agent/
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
-        make CFLAGS="-I/build/libconfig-1.7.2/lib -I/build/pcie_ep_octeon_target/target/libs/octep_cp_lib/bin/include" \
-             LDFLAGS="-L/build/libconfig-1.7.2/lib/.libs -L/build/pcie_ep_octeon_target/target/libs/octep_cp_lib/bin/lib" ; \
+        make CFLAGS="$(pkg-config --cflags libconfig) -I/build/pcie_ep_octeon_target/target/libs/octep_cp_lib/bin/include" \
+             LDFLAGS="$(pkg-config --libs libconfig) -L/build/pcie_ep_octeon_target/target/libs/octep_cp_lib/bin/lib" ; \
     fi
 
 ###############################################################################
@@ -51,6 +45,7 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         git-core \
         iproute \
         iputils \
+        libconfig \
         minicom \
         nftables \
         procps \
@@ -88,7 +83,6 @@ COPY --from=builder-octep-cp-agent /build/ /build/
 COPY manifests/exec_octep_cp_agent /build/
 
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
-        mv /build/libconfig-1.7.2/lib/.libs/libconfig.so* /usr/lib/ && \
         mv /build/pcie_ep_octeon_target/target/apps/octep_cp_agent/bin/bin/octep_cp_agent \
            /build/pcie_ep_octeon_target/target/apps/octep_cp_agent/cn106xx.cfg \
            /usr/bin/ && \
