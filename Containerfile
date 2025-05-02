@@ -1,30 +1,41 @@
 FROM quay.io/centos/centos:stream9 AS builder-octep-cp-agent
 ARG TARGETPLATFORM
 
+WORKDIR /build/
+
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
+        set -x && \
+        \
         dnf config-manager --set-enabled crb && \
         dnf upgrade -y && \
         dnf install -y \
             g++ \
             gcc \
             git-core \
-            libconfig-devel ; \
-    fi
-
-WORKDIR /build/
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
+            libconfig-devel && \
+        \
         git clone https://github.com/MarvellEmbeddedProcessors/pcie_ep_octeon_target.git && \
-        cd pcie_ep_octeon_target/ && \
-        git checkout -B tmp aa84a2331f76b68583e7b5861f17f5f3cef0fbd0 ; \
-    fi
+        \
+        cd /build/pcie_ep_octeon_target/ && \
+        git checkout -B tmp aa84a2331f76b68583e7b5861f17f5f3cef0fbd0 && \
+        \
+        cd /build/pcie_ep_octeon_target/target/libs/octep_cp_lib/ && \
+        make CFLAGS="-DUSE_PEM_AND_DPI_PF=1" && \
+        \
+        cd /build/pcie_ep_octeon_target/target/apps/octep_cp_agent/ && \
+        make CFLAGS="$(pkg-config --cflags libconfig) -I/build/pcie_ep_octeon_target/target/libs/octep_cp_lib/bin/include" \
+             LDFLAGS="$(pkg-config --libs libconfig) -L/build/pcie_ep_octeon_target/target/libs/octep_cp_lib/bin/lib" && \
+        \
+        cp /build/pcie_ep_octeon_target/target/apps/octep_cp_agent/bin/bin/octep_cp_agent /build/octep_cp_agent.25.03.0 && \
 
-WORKDIR /build/pcie_ep_octeon_target/target/libs/octep_cp_lib/
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
-        make CFLAGS="-DUSE_PEM_AND_DPI_PF=1" ; \
-    fi
-
-WORKDIR /build/pcie_ep_octeon_target/target/apps/octep_cp_agent/
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
+        cd /build/pcie_ep_octeon_target/ && \
+        git clean -fdx && \
+        git checkout -B tmp 35c9be07d2eefe1c909efefc9faa495db965a58e && \
+        \
+        cd /build/pcie_ep_octeon_target/target/libs/octep_cp_lib/ && \
+        make CFLAGS="-DUSE_PEM_AND_DPI_PF=1" && \
+        \
+        cd /build/pcie_ep_octeon_target/target/apps/octep_cp_agent/ && \
         make CFLAGS="$(pkg-config --cflags libconfig) -I/build/pcie_ep_octeon_target/target/libs/octep_cp_lib/bin/include" \
              LDFLAGS="$(pkg-config --libs libconfig) -L/build/pcie_ep_octeon_target/target/libs/octep_cp_lib/bin/lib" ; \
     fi
@@ -86,6 +97,7 @@ COPY manifests/exec_octep_cp_agent /build/
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] ; then \
         mv /build/pcie_ep_octeon_target/target/apps/octep_cp_agent/bin/bin/octep_cp_agent \
            /build/pcie_ep_octeon_target/target/apps/octep_cp_agent/cn106xx.cfg \
+           /build/octep_cp_agent.25.03.0 \
            /usr/bin/ && \
         mv /build/exec_octep_cp_agent /usr/bin/ && \
         ldconfig ; \

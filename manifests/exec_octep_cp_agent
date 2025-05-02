@@ -31,16 +31,13 @@ bind_vfio_pci() {
 }
 
 run() {
-    # Follows [1].
-    #
-    # [1] https://github.com/MarvellEmbeddedProcessors/pcie_ep_octeon_target/blob/aa84a2331f76b68583e7b5861f17f5f3cef0fbd0/target/apps/octep_cp_agent/README#L107
-
     setup_hugepages
 
     chroot /host modprobe vfio-pci
 
     pem="$(lspci -d 177d:a06c -n | awk 'NR==1{print $1}')"
     dpi="$(lspci -d 177d:a080 -n | awk 'NR==1{print $1}')"
+    read -ra rvu_pf_2 <<< "$(lspci -d 177d:a0ef -n | awk '{print $1}')"
 
     test -n "$pem"
     test -n "$dpi"
@@ -48,7 +45,18 @@ run() {
     bind_vfio_pci "$pem"
     bind_vfio_pci "$dpi"
 
-    exec /usr/bin/octep_cp_agent /usr/bin/cn106xx.cfg -- --dpi_dev "$dpi" --pem_dev "$pem"
+    if [ "${#rvu_pf_2[@]}" -ne 2 ] ; then
+        # https://github.com/MarvellEmbeddedProcessors/pcie_ep_octeon_target/blob/aa84a2331f76b68583e7b5861f17f5f3cef0fbd0/target/apps/octep_cp_agent/README#L107
+        cp_args=( --dpi_dev "$dpi" )
+        cp_agent="/usr/bin/octep_cp_agent.25.03.0"
+    else
+        # https://github.com/MarvellEmbeddedProcessors/pcie_ep_octeon_target/blob/35c9be07d2eefe1c909efefc9faa495db965a58e/target/apps/octep_cp_agent/README#L139
+        bind_vfio_pci "${rvu_pf_2[1]}"
+        cp_args=( --sdp_rvu_pf "${rvu_pf_2[1]}" )
+        cp_agent="/usr/bin/octep_cp_agent"
+    fi
+
+    exec "$cp_agent" /usr/bin/cn106xx.cfg -- "${cp_args[@]}" --pem_dev "$pem"
 }
 
 run
