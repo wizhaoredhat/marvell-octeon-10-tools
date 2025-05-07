@@ -48,6 +48,7 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         libconfig \
         minicom \
         nftables \
+        pciutils \
         procps \
         python-unversioned-command \
         python3-pip \

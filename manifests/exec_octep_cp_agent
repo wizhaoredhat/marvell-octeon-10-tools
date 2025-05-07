@@ -18,17 +18,36 @@ setup_hugepages() {
     fi
 }
 
+sysfs_write() {
+    printf '%s\n' "$1" > "$2"
+}
+
+bind_vfio_pci() {
+    sysfs_write vfio-pci "/sys/bus/pci/devices/$1/driver_override"
+    if [ -f "/sys/bus/pci/devices/$1/driver/unbind" ] ; then
+        sysfs_write "$1" "/sys/bus/pci/devices/$1/driver/unbind"
+    fi
+    sysfs_write "$1" /sys/bus/pci/drivers_probe
+}
+
 run() {
-    # from http://file.brq.redhat.com/~thaller/SDP-CP-agent.docx
+    # Follows [1].
+    #
+    # [1] https://github.com/MarvellEmbeddedProcessors/pcie_ep_octeon_target/blob/aa84a2331f76b68583e7b5861f17f5f3cef0fbd0/target/apps/octep_cp_agent/README#L107
     setup_hugepages
 
     chroot /host modprobe vfio-pci
-    echo vfio-pci > /sys/bus/pci/devices/0000:06:00.0/driver_override
-    echo vfio-pci > /sys/bus/pci/devices/0001:00:10.0/driver_override
-    echo 0000:06:00.0 > /sys/bus/pci/drivers_probe
-    echo 0001:00:10.0 > /sys/bus/pci/drivers_probe
 
-    exec /usr/bin/octep_cp_agent /usr/bin/cn106xx.cfg -- --dpi_dev 0000:06:00.0 --pem_dev 0001:00:10.0
+    pem="$(lspci -d 177d:a06c -n | awk 'NR==1{print $1}')"
+    dpi="$(lspci -d 177d:a080 -n | awk 'NR==1{print $1}')"
+
+    test -n "$pem"
+    test -n "$dpi"
+
+    bind_vfio_pci "$pem"
+    bind_vfio_pci "$dpi"
+
+    exec /usr/bin/octep_cp_agent /usr/bin/cn106xx.cfg -- --dpi_dev "$dpi" --pem_dev "$pem"
 }
 
 run
