@@ -203,6 +203,33 @@ fi
 
 ################################################################################
 
+cat <<'EOF' > /usr/bin/dpu-monitor.sh
+#!/bin/bash
+
+ip -d link || :
+ip -ts monitor link addr route
+EOF
+
+chmod +x /usr/bin/dpu-monitor.sh
+
+cat <<'EOF' > /etc/systemd/system/dpu-monitor.service
+[Unit]
+Description=Monitor DPU for Debugging
+Before=octep_cp_agent.service
+Before=pre-network.target
+
+[Service]
+ExecStart=/usr/bin/dpu-monitor.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable dpu-monitor.service
+
+################################################################################
+
 cat <<'EOF' > /usr/bin/run_octep_cp_agent
 #!/bin/bash
 
@@ -243,6 +270,8 @@ Environment="IMAGE=quay.io/sdaniele/marvell-tools:latest"
 [Install]
 WantedBy=multi-user.target
 EOF
+
+################################################################################
 
 systemctl daemon-reload
 if [ "@__OCTEP_CP_AGENT_SERVICE_ENABLE__@" = 1 ] ; then
