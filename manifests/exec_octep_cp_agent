@@ -3,7 +3,7 @@
 set -ex
 
 setup_hugepages() {
-    if [ "$(cat /proc/meminfo | sed -n 's/^Hugepagesize: *//p')" != "32768 kB" ] ; then
+    if [ "$(sed -n 's/^Hugepagesize: *//p' < /proc/meminfo)" != "32768 kB" ] ; then
         # octeon_cp_agent requires hugepages aligned to 4M. To achived that,
         # ensure to use 32M hugepages (via default_hugepagesz=32M boot cmdline).
         echo "WARNING: hugepage size not as expected 32M."
