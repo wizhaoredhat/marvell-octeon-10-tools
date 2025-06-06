@@ -44,7 +44,9 @@ run() {
     #
     # [1] https://github.com/MarvellEmbeddedProcessors/pcie_ep_octeon_target/blob/aa84a2331f76b68583e7b5861f17f5f3cef0fbd0/target/apps/octep_cp_agent/README#L107
 
-    ensure_sdp_up
+    if [ "$EXEC_OCTEP_CP_AGENT_SET_UP" != '0' ] ; then
+        ensure_sdp_up
+    fi
 
     setup_hugepages
 
