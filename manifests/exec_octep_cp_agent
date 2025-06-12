@@ -2,15 +2,6 @@
 
 set -ex
 
-ensure_sdp_up() {
-    # Seems that we must ensure that all SDP interfaces are always up (and up
-    # before anything else). See https://issues.redhat.com/browse/RHEL-90248
-    for f in $(cd /sys/class/net/ && ls -1d enP2p1s0* 2>/dev/null) ; do
-        ip link set "$f" up || :
-    done
-}
-
-
 setup_hugepages() {
     if [ "$(sed -n 's/^Hugepagesize: *//p' < /proc/meminfo)" != "32768 kB" ] ; then
         # octeon_cp_agent requires hugepages aligned to 4M. To achived that,
@@ -43,10 +34,6 @@ run() {
     # Follows [1].
     #
     # [1] https://github.com/MarvellEmbeddedProcessors/pcie_ep_octeon_target/blob/aa84a2331f76b68583e7b5861f17f5f3cef0fbd0/target/apps/octep_cp_agent/README#L107
-
-    if [ "$EXEC_OCTEP_CP_AGENT_SET_UP" != '0' ] ; then
-        ensure_sdp_up
-    fi
 
     setup_hugepages
 

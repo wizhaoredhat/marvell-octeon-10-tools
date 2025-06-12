@@ -216,6 +216,7 @@ cat <<'EOF' > /etc/systemd/system/dpu-monitor.service
 [Unit]
 Description=Monitor DPU for Debugging
 Before=octep_cp_agent.service
+Before=ip-link-up.service
 Before=pre-network.target
 
 [Service]
@@ -227,6 +228,41 @@ EOF
 
 systemctl daemon-reload
 systemctl enable dpu-monitor.service
+
+################################################################################
+
+cat <<'EOF' > /usr/bin/ip-link-up.sh
+#!/bin/bash
+
+set -ex
+
+# Seems that we must ensure that all SDP interfaces are always up (and up
+# before anything else). See https://issues.redhat.com/browse/RHEL-90248
+for f in $(cd /sys/class/net/ && ls -1d enP2p1s0* 2>/dev/null) ; do
+    ip link set "$f" up || :
+done
+EOF
+
+chmod +x /usr/bin/ip-link-up.sh
+
+cat <<'EOF' > /etc/systemd/system/ip-link-up.service
+[Unit]
+Description=Set up SDP interfaces (RHEL-902048)
+After=local-fs.target
+Before=pre-network.target
+Wants=pre-network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ip-link-up.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable ip-link-up.service
 
 ################################################################################
 
@@ -270,8 +306,6 @@ Environment="IMAGE=quay.io/sdaniele/marvell-tools:latest"
 [Install]
 WantedBy=multi-user.target
 EOF
-
-################################################################################
 
 systemctl daemon-reload
 if [ "@__OCTEP_CP_AGENT_SERVICE_ENABLE__@" = 1 ] ; then
