@@ -461,7 +461,7 @@ def mount_iso(iso_path: str) -> None:
 
 
 def main() -> None:
-    logger.info("pxeboot: {shlex.join(shlex.quote(s) for s in sys.argv)}")
+    logger.info(f"pxeboot: {shlex.join(shlex.quote(s) for s in sys.argv)}")
     args = parse_args()
     host_mode = detect_host_mode(args.host_path, args.host_mode)
     logger.info("Preparing services for Pxeboot")
