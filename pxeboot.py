@@ -331,6 +331,9 @@ def copy_kickstart(
     )
     kickstart = kickstart.replace("@__CHRONY_SERVERS__@", res.out)
 
+    for ks_lines in kickstart.splitlines(keepends=True):
+        logger.info(f"kickstart: {repr(ks_lines)}")
+
     with open("/www/kickstart.ks", "w") as f:
         f.write(kickstart)
 
@@ -458,6 +461,7 @@ def mount_iso(iso_path: str) -> None:
 
 
 def main() -> None:
+    logger.info("pxeboot: {shlex.join(shlex.quote(s) for s in sys.argv)}")
     args = parse_args()
     host_mode = detect_host_mode(args.host_path, args.host_mode)
     logger.info("Preparing services for Pxeboot")
