@@ -75,6 +75,12 @@ def parse_args() -> argparse.Namespace:
         help='The static hostname of the DPU. Defaults to "marvell-dpu". With "--host-mode" set to "rhel" or "coreos", this is also added to /etc/hosts alongside "dpu".',
     )
     parser.add_argument(
+        "--console-wait",
+        type=float,
+        default=60.0,
+        help="After installation is started, the tool will stay connected to the serial port for the specified amount of time. The benefit is that we see what happens in the output of the tool. The downside is that we cannot attach a second terminal to the serial port during that time. Defaults to 60 seconds.",
+    )
+    parser.add_argument(
         "--nm-secondary-cloned-mac-address",
         type=str,
         default="",
@@ -142,9 +148,9 @@ def detect_host_mode(host_path: str, host_mode: str) -> str:
     return host_mode
 
 
-def wait_for_boot() -> None:
+def wait_for_boot(timeout: float = 1800.0) -> None:
     logger.info(f"Wait for boot and IP address {common_dpu.dpu_ip4addr}")
-    end = time.monotonic() + 1800
+    end = time.monotonic() + timeout
     sleep_time = 60
     while True:
         time.sleep(sleep_time)
@@ -158,7 +164,7 @@ def wait_for_boot() -> None:
             )
 
 
-def select_pxe_entry() -> None:
+def select_pxe_entry(console_wait: float = 60.0) -> None:
     logger.info("selecting pxe entry")
 
     with common.Serial(common_dpu.TTYUSB0) as ser:
@@ -217,7 +223,7 @@ def select_pxe_entry() -> None:
 
         # Read and log the output for a bit longer. This way, we see how the
         # DPU starts installation.
-        ser.expect(pattern=None, timeout=60)
+        ser.expect(pattern=None, timeout=console_wait)
         logger.info(f"Closing serial console {ser.port}")
 
 
@@ -496,8 +502,8 @@ def main() -> None:
         logger.info("Starting UEFI PXE Boot")
         logger.info("Resetting card")
         reset()
-        select_pxe_entry()
-        wait_for_boot()
+        select_pxe_entry(args.console_wait)
+        wait_for_boot(max(args.console_wait + 100.0, 1800.0))
 
     post_pxeboot(host_mode, args.host_path, args.dpu_name)
 
