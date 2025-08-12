@@ -37,7 +37,7 @@ run() {
 
     pem="$(lspci -d 177d:a06c -n | awk 'NR==1{print $1}')"
     dpi="$(lspci -d 177d:a080 -n | awk 'NR==1{print $1}')"
-    read -ra rvu_pf_2 <<< "$(lspci -d 177d:a0ef -n | awk '{print $1}')"
+    mapfile -t rvu_pf_2 < <(lspci -d 177d:a0ef -n | awk '{print $1}')
 
     test -n "$pem"
     test -n "$dpi"
