@@ -458,12 +458,47 @@ def setup_dhcp() -> None:
     common_dpu.run_dhcpd()
 
 
-def mount_iso(iso_path: str) -> None:
-    os.makedirs(iso_mount_path, exist_ok=True)
-    host.local.run(f"umount {shlex.quote(iso_mount_path)}")
-    host.local.run(
-        f"mount -t iso9660 -o loop {shlex.quote(iso_path)} {shlex.quote(iso_mount_path)}"
-    )
+def create_and_mount_iso(iso: str, host_path: str) -> None:
+    is_retry = False
+    iso2 = iso
+    while True:
+
+        # We set `force=is_retry`. On retry (a second run of the loop) we will
+        # force a re-download of the file. Contrary to the first run, where we
+        # might accept an existing file on disk.
+        iso_path, iso_url, cached_http_file = common_dpu.create_iso_file(
+            iso2,
+            chroot_path=host_path,
+            force=is_retry,
+        )
+
+        required = True
+        if (not is_retry) and cached_http_file:
+            # On first try, if the ISO was found on disk (and the path was a HTTP URL), we
+            # accept that the file might be broken.
+            required = False
+        else:
+            # In other cases, a broken ISO is fatal.
+            required = True
+
+        success = common_dpu.mount_iso(
+            iso_path,
+            mount_path=iso_mount_path,
+            required=required,
+            check_files=[
+                "media.repo",
+                "images/pxeboot/vmlinuz",
+                "images/pxeboot/initrd.img",
+                "EFI/BOOT/grubaa64.efi",
+            ],
+        )
+        if success:
+            logger.info(f"ISO {iso_path} successfully mounted at {iso_mount_path}")
+            return
+
+        iso2 = common.unwrap(iso_url)
+        is_retry = True
+        logger.warn(f"ISO {iso_path} seems broken. Try re-downloading {iso2}")
 
 
 def main() -> None:
@@ -474,9 +509,8 @@ def main() -> None:
     ssh_pubkey = prepare_host(host_mode, args.dev, args.host_path, args.ssh_key)
 
     if not args.host_setup_only:
-        iso_path = common_dpu.create_iso_file(args.iso, chroot_path=args.host_path)
+        create_and_mount_iso(iso=args.iso, host_path=args.host_path)
         setup_dhcp()
-        mount_iso(iso_path)
         setup_tftp()
         setup_http(
             args.host_path,
