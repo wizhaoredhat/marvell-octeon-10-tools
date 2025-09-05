@@ -173,7 +173,48 @@ def ssh_read_pubkey(ssh_privkey_file: str) -> str:
 DEFAULT_RHEL_ISO = "9.6"
 
 
-def create_iso_file(iso: str, chroot_path: str) -> str:
+def mount_iso(
+    iso_path: str,
+    *,
+    mount_path: str,
+    required: bool = False,
+    check_files: Optional[Iterable[str]] = None,
+) -> bool:
+    if check_files is not None:
+        check_files = common.iter_eval_now(check_files)
+    os.makedirs(mount_path, exist_ok=True)
+    host.local.run(["umount", mount_path])
+    ret = host.local.run(
+        ["mount", "-t", "iso9660", "-o", "loop", iso_path, mount_path],
+        die_on_error=required,
+    )
+    if not ret:
+        return False
+
+    if check_files:
+        ret = host.local.run(
+            [
+                "sha256sum",
+                *[f"{mount_path}/{s}" for s in check_files],
+            ],
+            die_on_error=required,
+        )
+        if not ret:
+            host.local.run(["umount", mount_path])
+            return False
+
+    return True
+
+
+def create_iso_file(
+    iso: str,
+    chroot_path: str,
+    *,
+    force: bool = False,
+) -> tuple[str, Optional[str], bool]:
+
+    cached_http_file = False
+    iso_url: Optional[str] = None
 
     iso0 = iso
 
@@ -205,7 +246,7 @@ def create_iso_file(iso: str, chroot_path: str) -> str:
     if iso1.startswith("http://") or iso1.startswith("https://"):
         filename = iso1[(iso1.rfind("/") + 1) :]
         iso2 = os.path.join(chroot_path, f"root/rhel-iso-{filename}")
-        if not os.path.exists(iso2):
+        if force or not os.path.exists(iso2):
             ret = host.local.run(
                 f"curl -k -o {shlex.quote(iso2)} {shlex.quote(iso1)}",
                 log_level_fail=logging.ERROR,
@@ -214,6 +255,9 @@ def create_iso_file(iso: str, chroot_path: str) -> str:
                 raise RuntimeError(
                     f'failure to download RHEL ISO image "{iso1}" to "{iso2}"'
                 )
+        else:
+            cached_http_file = True
+            iso_url = iso1
     else:
         # Not a HTTP/HTTPS URL. This is expected to be a pathname already.
         # Pass on to iso2.
@@ -224,7 +268,7 @@ def create_iso_file(iso: str, chroot_path: str) -> str:
         raise RuntimeError(f'iso path "{iso}" ("{iso2}") does not exist')
 
     logger.info(f"use iso {shlex.quote(iso2)}")
-    return iso2
+    return iso2, iso_url, cached_http_file
 
 
 def run_main(main_fcn: Callable[[], None]) -> None:
