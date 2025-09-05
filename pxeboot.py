@@ -519,4 +519,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    common_dpu.run_main(main)
