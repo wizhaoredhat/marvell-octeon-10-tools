@@ -4,6 +4,7 @@ import shlex
 import shutil
 
 from collections.abc import Iterable
+from typing import Callable
 from typing import Optional
 from typing import Union
 
@@ -224,3 +225,10 @@ def create_iso_file(iso: str, chroot_path: str) -> str:
 
     logger.info(f"use iso {shlex.quote(iso2)}")
     return iso2
+
+
+def run_main(main_fcn: Callable[[], None]) -> None:
+    common.run_main(
+        main_fcn,
+        cleanup=common.thread_list_join_all,
+    )
