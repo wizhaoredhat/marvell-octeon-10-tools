@@ -262,7 +262,7 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable ip-link-up.service
+systemctl disable ip-link-up.service
 
 ################################################################################
 
