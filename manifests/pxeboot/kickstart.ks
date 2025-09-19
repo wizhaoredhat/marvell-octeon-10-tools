@@ -188,6 +188,32 @@ chmod +x /etc/yum.repos.d/marvell-tools-beaker.sh
 
 /etc/yum.repos.d/marvell-tools-beaker.sh @__YUM_REPO_URL__@ @__YUM_REPO_ENABLED__@
 
+_dnf_install_urls() {
+    if [ "$#" -gt 0 ] ; then
+        (
+            local tmp_files=()
+            local packages=()
+            local pkg
+            local tmp
+
+            trap 'rm -f "${tmp_files[@]}"' EXIT
+
+            for pkg ; do
+                if [[ "$pkg" =~ ^untrusted:https?:// ]]; then
+                    # We want to ignore TLS errors. Hence download the file first.
+                    tmp="$(mktemp -t dnf-install-pkg-XXXXXX.rpm)"
+                    tmp_files+=( "$tmp" )
+                    curl -k -L -o "$tmp" "${pkg#untrusted:}"
+                    pkg="$tmp"
+                fi
+                packages+=( "$pkg" )
+            done
+
+            dnf install -y "${packages[@]}"
+        )
+    fi
+}
+
 EXTRA_PACKAGES=( @__EXTRA_PACKAGES__@ )
 if [ "@__DEFAULT_EXTRA_PACKAGES__@" = 1 ] ; then
     case "$(sed -n 's/^VERSION_ID="\(.*\)"/\1/p' /etc/os-release)" in
@@ -197,9 +223,7 @@ if [ "@__DEFAULT_EXTRA_PACKAGES__@" = 1 ] ; then
             ;;
     esac
 fi
-if [ "${#EXTRA_PACKAGES[@]}" -gt 0 ] ; then
-    dnf install -y "${EXTRA_PACKAGES[@]}"
-fi
+_dnf_install_urls "${EXTRA_PACKAGES[@]}"
 
 ################################################################################
 
