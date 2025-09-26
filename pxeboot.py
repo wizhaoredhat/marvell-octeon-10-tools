@@ -499,7 +499,7 @@ def create_and_mount_iso(iso: str, host_path: str) -> None:
 
         iso2 = common.unwrap(iso_url)
         is_retry = True
-        logger.warn(f"ISO {iso_path} seems broken. Try re-downloading {iso2}")
+        logger.warning(f"ISO {iso_path} seems broken. Try re-downloading {iso2}")
 
 
 def dpu_pxeboot(
@@ -552,7 +552,7 @@ def main() -> None:
             except Exception as e:
                 if try_count >= 3:
                     raise RuntimeError(f"Failure to pxeboot: {e}") from e
-                logger.warn(f"Failure to pxeboot (try {try_count}): {e}")
+                logger.warning(f"Failure to pxeboot (try {try_count}): {e}")
                 continue
             break
 
