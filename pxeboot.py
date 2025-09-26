@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import itertools
 import os
 import shlex
 import shutil
@@ -501,6 +502,16 @@ def create_and_mount_iso(iso: str, host_path: str) -> None:
         logger.warn(f"ISO {iso_path} seems broken. Try re-downloading {iso2}")
 
 
+def dpu_pxeboot(
+    *,
+    console_wait: float,
+) -> None:
+    logger.info("Resetting card")
+    reset()
+    select_pxe_entry(console_wait)
+    wait_for_boot(max(console_wait + 100.0, 1800.0))
+
+
 def main() -> None:
     logger.info(f"pxeboot: {shlex.join(shlex.quote(s) for s in sys.argv)}")
     args = parse_args()
@@ -533,11 +544,17 @@ def main() -> None:
             input(
                 "dhcp/tftp/http services started. Waiting. Press ENTER to continue or abort with CTRL+C"
             )
-        logger.info("Starting UEFI PXE Boot")
-        logger.info("Resetting card")
-        reset()
-        select_pxe_entry(args.console_wait)
-        wait_for_boot(max(args.console_wait + 100.0, 1800.0))
+
+        for try_count in itertools.count(start=1):
+            logger.info(f"Starting UEFI PXE Boot (try {try_count})")
+            try:
+                dpu_pxeboot(console_wait=args.console_wait)
+            except Exception as e:
+                if try_count >= 3:
+                    raise RuntimeError(f"Failure to pxeboot: {e}") from e
+                logger.warn(f"Failure to pxeboot (try {try_count}): {e}")
+                continue
+            break
 
     post_pxeboot(host_mode, args.host_path, args.dpu_name)
 
