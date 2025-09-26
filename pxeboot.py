@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
+import abc
 import argparse
+import dataclasses
 import datetime
 import itertools
 import os
@@ -8,6 +10,7 @@ import shlex
 import shutil
 import sys
 import time
+import typing
 
 from typing import Optional
 
@@ -25,6 +28,36 @@ from reset import reset
 
 
 iso_mount_path = "/mnt/marvell_dpu_iso"
+
+
+@dataclasses.dataclass(frozen=True)
+class IsoKind(abc.ABC):
+    CHECK_FILES: typing.ClassVar[tuple[str, ...]]
+
+    @staticmethod
+    def detect_from_iso(
+        mount_path: str,
+        *,
+        read_check: bool = False,
+    ) -> Optional["IsoKind"]:
+        for iso_kind_type in (IsoKindRhel,):
+            iso_kind = iso_kind_type()
+            if common_dpu.check_files(
+                iso_kind.CHECK_FILES,
+                cwd=mount_path,
+                read_check=read_check,
+            ):
+                return iso_kind
+        return None
+
+
+class IsoKindRhel(IsoKind):
+    CHECK_FILES = (
+        "EFI/BOOT/grubaa64.efi",
+        "images/pxeboot/initrd.img",
+        "images/pxeboot/vmlinuz",
+        "media.repo",
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -488,7 +521,7 @@ def setup_dhcp() -> None:
     common_dpu.run_dhcpd()
 
 
-def create_and_mount_iso(iso: str, host_path: str) -> None:
+def create_and_mount_iso(iso: str, host_path: str) -> IsoKind:
     is_retry = False
     iso2 = iso
     while True:
@@ -502,29 +535,28 @@ def create_and_mount_iso(iso: str, host_path: str) -> None:
             force=is_retry,
         )
 
-        required = True
-        if (not is_retry) and cached_http_file:
-            # On first try, if the ISO was found on disk (and the path was a HTTP URL), we
-            # accept that the file might be broken.
-            required = False
-        else:
-            # In other cases, a broken ISO is fatal.
-            required = True
-
         success = common_dpu.mount_iso(
             iso_path,
             mount_path=iso_mount_path,
-            required=required,
-            check_files=[
-                "media.repo",
-                "images/pxeboot/vmlinuz",
-                "images/pxeboot/initrd.img",
-                "EFI/BOOT/grubaa64.efi",
-            ],
         )
         if success:
-            logger.info(f"ISO {iso_path} successfully mounted at {iso_mount_path}")
-            return
+            iso_kind = IsoKind.detect_from_iso(iso_mount_path, read_check=True)
+            if iso_kind is not None:
+                logger.info(
+                    f"ISO {iso_path} successfully mounted at {iso_mount_path} (as {iso_kind})"
+                )
+                return iso_kind
+            host.local.run(["umount", iso_mount_path])
+
+        if is_retry or not cached_http_file:
+            # On first try, if the ISO was found on disk (and the path was a
+            # HTTP URL), we accept that the file might be broken. We will retry
+            # in that case.
+            #
+            # But on retry, or if this was not a HTTP URL, this is a fatal
+            # error.
+            logger.error(f"Failure to mount iso {iso}")
+            raise RuntimeError(f"Failure to mount ISO {iso}")
 
         iso2 = common.unwrap(iso_url)
         is_retry = True

@@ -165,37 +165,36 @@ def ssh_read_pubkey(ssh_privkey_file: str) -> str:
 DEFAULT_RHEL_ISO = "9.6"
 
 
+def check_files(
+    files: Iterable[str],
+    *,
+    cwd: Optional[str] = None,
+    read_check: bool = False,
+) -> bool:
+    files = common.iter_eval_now(files)
+    files = [common.path_norm(s, cwd=cwd) for s in files]
+
+    if not all(os.path.exists(f) for f in files):
+        return False
+
+    if read_check and not host.local.run(["sha256sum", *files]):
+        return False
+
+    return True
+
+
 def mount_iso(
     iso_path: str,
     *,
     mount_path: str,
-    required: bool = False,
-    check_files: Optional[Iterable[str]] = None,
 ) -> bool:
-    if check_files is not None:
-        check_files = common.iter_eval_now(check_files)
     os.makedirs(mount_path, exist_ok=True)
     host.local.run(["umount", mount_path])
     ret = host.local.run(
         ["mount", "-t", "iso9660", "-o", "loop", iso_path, mount_path],
-        die_on_error=required,
+        log_level_fail=logging.WARN,
     )
-    if not ret:
-        return False
-
-    if check_files:
-        ret = host.local.run(
-            [
-                "sha256sum",
-                *[f"{mount_path}/{s}" for s in check_files],
-            ],
-            die_on_error=required,
-        )
-        if not ret:
-            host.local.run(["umount", mount_path])
-            return False
-
-    return True
+    return ret.success
 
 
 def create_iso_file(
