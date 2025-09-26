@@ -227,7 +227,7 @@ def create_iso_file(
             rhel_version = DEFAULT_RHEL_ISO
         url = f"https://download.eng.bos.redhat.com/rhel-9/nightly/RHEL-9/latest-RHEL-{rhel_version}.0/compose/BaseOS/aarch64/iso/"
         res = host.local.run(
-            f'curl -k -s {shlex.quote(url)} | sed -n \'s/.*href="\\(RHEL-[^"]\\+-dvd1.iso\\)".*/\\1/p\' | head -n1',
+            f'curl -L -k -s {shlex.quote(url)} | sed -n \'s/.*href="\\(RHEL-[^"]\\+-dvd1.iso\\)".*/\\1/p\' | head -n1',
             log_level_fail=logging.ERROR,
         )
         url_part = res.out.strip()
@@ -248,7 +248,7 @@ def create_iso_file(
         iso2 = os.path.join(chroot_path, f"root/rhel-iso-{filename}")
         if force or not os.path.exists(iso2):
             ret = host.local.run(
-                f"curl -k -o {shlex.quote(iso2)} {shlex.quote(iso1)}",
+                f"curl -L -k -o {shlex.quote(iso2)} {shlex.quote(iso1)}",
                 log_level_fail=logging.ERROR,
             )
             if not ret.success:

@@ -155,7 +155,7 @@ ENABLED="${2-1}"
 if [ -z "$URL" ] ; then
     OS_VERSION="$(sed -n 's/^VERSION_ID="\(.*\)"$/\1/p' /etc/os-release | head -n1)"
     URL_BASE='http://download.hosts.prod.upshift.rdu2.redhat.com/rhel-9/composes/RHEL-9/'
-    URL_PART=$(curl -s "$URL_BASE" | sed -n 's/.*href="\(RHEL-'"$OS_VERSION"'.0-updates[^"]*\)".*/\1/p' | grep -v delete-me/ | sort | tail -n1)
+    URL_PART=$(curl -L -s "$URL_BASE" | sed -n 's/.*href="\(RHEL-'"$OS_VERSION"'.0-updates[^"]*\)".*/\1/p' | grep -v delete-me/ | sort | tail -n1)
     if [ -z "$URL_PART" -o -z "$OS_VERSION" ] ; then
         exit 1
     fi
@@ -203,7 +203,7 @@ _dnf_install_urls() {
                     # We want to ignore TLS errors. Hence download the file first.
                     tmp="$(mktemp -t dnf-install-pkg-XXXXXX.rpm)"
                     tmp_files+=( "$tmp" )
-                    curl -k -L -o "$tmp" "${pkg#untrusted:}"
+                    curl -L -k -o "$tmp" "${pkg#untrusted:}"
                     pkg="$tmp"
                 fi
                 packages+=( "$pkg" )

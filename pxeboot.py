@@ -277,7 +277,7 @@ def detect_yum_repo_url() -> str:
         )
         sed_pattern = f's/.*href="\\(RHEL-{os_version}.0-updates[^"]*\\)".*/\\1/p'
         res = host.local.run(
-            f"curl -s {shlex.quote(url_base)} | "
+            f"curl -L -s {shlex.quote(url_base)} | "
             f"sed -n {shlex.quote(sed_pattern)} | "
             "grep -v delete-me/ | sort | tail -n1"
         )

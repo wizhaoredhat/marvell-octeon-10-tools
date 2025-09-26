@@ -83,7 +83,7 @@ def prepare_image(boot_device: str, img: typing.Optional[str]) -> str:
         img2 = "/tmp/fwupdate.img"
         logger.info(f"downloading {repr(img)} to {repr(img2)}.")
         host.local.run(
-            ["curl", "-k", "-L", "-o", img2, img],
+            ["curl", "-L", "-k", "-o", img2, img],
             die_on_error=True,
         )
         img = img2
