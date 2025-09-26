@@ -22,7 +22,7 @@ from common_dpu import logger
 from reset import reset
 
 
-iso_mount_path = "/mnt/marvel_dpu_iso"
+iso_mount_path = "/mnt/marvell_dpu_iso"
 
 
 def parse_args() -> argparse.Namespace:
