@@ -247,8 +247,9 @@ def create_iso_file(
         filename = iso1[(iso1.rfind("/") + 1) :]
         iso2 = os.path.join(chroot_path, f"root/rhel-iso-{filename}")
         if force or not os.path.exists(iso2):
+            iso2_tmp = f"{iso2}.tmp"
             ret = host.local.run(
-                f"curl -L -k -o {shlex.quote(iso2)} {shlex.quote(iso1)}",
+                f"curl -L -k -o {shlex.quote(iso2_tmp)} {shlex.quote(iso1)} && mv {shlex.quote(iso2_tmp)} {shlex.quote(iso2)}",
                 log_level_fail=logging.ERROR,
             )
             if not ret.success:
