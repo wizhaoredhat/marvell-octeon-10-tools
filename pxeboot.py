@@ -13,6 +13,7 @@ from typing import Optional
 
 from ktoolbox import common
 from ktoolbox import host
+from ktoolbox import netdev
 
 import common_dpu
 
@@ -157,7 +158,16 @@ def wait_for_boot(timeout: float = 1800.0) -> None:
     while True:
         time.sleep(sleep_time)
         sleep_time = max(int(sleep_time / 1.3), 9)
-        if common_dpu.ping(common_dpu.dpu_ip4addr):
+        # We rely on configuring a static IP address on the installed host.
+        #
+        # For one, to always have that IP address there (even after there
+        # is no more DHCP server running) is useful to access the host.
+        #
+        # But also, if we would wait here to ping one of the DHCP addresses,
+        # then we wouldn't easily know whether the installer is still running
+        # or installation completed with successful. To find the static IP
+        # address quite reliably tells us that the host is up.
+        if netdev.wait_ping(common_dpu.dpu_ip4addr) is not None:
             logger.info(f"got response from {common_dpu.dpu_ip4addr}")
             break
         if time.monotonic() > end:
