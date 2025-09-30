@@ -59,6 +59,82 @@ class IsoKindRhel(IsoKind):
         "media.repo",
     )
 
+    @staticmethod
+    def copy_kickstart(
+        host_path: str,
+        dpu_name: str,
+        ssh_pubkey: list[str],
+        yum_repos: str,
+        octep_cp_agent_service_enable: bool,
+        nm_secondary_cloned_mac_address: str,
+        nm_secondary_ip_address: str,
+        nm_secondary_ip_gateway: str,
+        extra_package: list[str],
+        default_extra_packages: bool,
+    ) -> None:
+        ip_address = ""
+        if nm_secondary_ip_address:
+            ip_address = f"address1={nm_secondary_ip_address}"
+            if nm_secondary_ip_gateway:
+                ip_address += f",{nm_secondary_ip_gateway}"
+
+        with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
+            kickstart = f.read()
+
+        yum_repo_enabled = yum_repos == "rhel-nightly"
+
+        kickstart = kickstart.replace("@__HOSTNAME__@", shlex.quote(dpu_name))
+        kickstart = kickstart.replace(
+            "@__SSH_PUBKEY__@", shlex.quote("\n".join(ssh_pubkey))
+        )
+        kickstart = kickstart.replace("@__DPU_IP4ADDRNET__@", common_dpu.dpu_ip4addrnet)
+        kickstart = kickstart.replace("@__HOST_IP4ADDR__@", common_dpu.host_ip4addr)
+        kickstart = kickstart.replace(
+            "@__NM_SECONDARY_CLONED_MAC_ADDRESS__@",
+            nm_secondary_cloned_mac_address,
+        )
+        kickstart = kickstart.replace(
+            "@__NM_SECONDARY_IP_ADDRESS__@",
+            ip_address,
+        )
+        kickstart = kickstart.replace(
+            "@__YUM_REPO_URL__@", shlex.quote(detect_yum_repo_url())
+        )
+        kickstart = kickstart.replace(
+            "@__YUM_REPO_ENABLED__@",
+            common.bool_to_str(yum_repo_enabled, format="1"),
+        )
+        kickstart = kickstart.replace(
+            "@__EXTRA_PACKAGES__@",
+            " ".join(shlex.quote(s) for s in extra_package),
+        )
+        kickstart = kickstart.replace(
+            "@__DEFAULT_EXTRA_PACKAGES__@",
+            "1" if default_extra_packages else "0",
+        )
+        kickstart = kickstart.replace(
+            "@__OCTEP_CP_AGENT_SERVICE_ENABLE__@",
+            common.bool_to_str(octep_cp_agent_service_enable, format="1"),
+        )
+
+        res = host.local.run(
+            [
+                "grep",
+                "-R",
+                "-h",
+                "^ *server ",
+                f"{host_path}/run/chrony-dhcp/",
+                f"{host_path}/etc/chrony.conf",
+            ]
+        )
+        kickstart = kickstart.replace("@__CHRONY_SERVERS__@", res.out)
+
+        for ks_lines in kickstart.splitlines(keepends=True):
+            logger.info(f"kickstart: {repr(ks_lines)}")
+
+        with open("/www/kickstart.ks", "w") as f:
+            f.write(kickstart)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Process ISO file.")
@@ -331,82 +407,6 @@ def detect_yum_repo_url() -> str:
     return ""
 
 
-def copy_kickstart(
-    host_path: str,
-    dpu_name: str,
-    ssh_pubkey: list[str],
-    yum_repos: str,
-    octep_cp_agent_service_enable: bool,
-    nm_secondary_cloned_mac_address: str,
-    nm_secondary_ip_address: str,
-    nm_secondary_ip_gateway: str,
-    extra_package: list[str],
-    default_extra_packages: bool,
-) -> None:
-    ip_address = ""
-    if nm_secondary_ip_address:
-        ip_address = f"address1={nm_secondary_ip_address}"
-        if nm_secondary_ip_gateway:
-            ip_address += f",{nm_secondary_ip_gateway}"
-
-    with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
-        kickstart = f.read()
-
-    yum_repo_enabled = yum_repos == "rhel-nightly"
-
-    kickstart = kickstart.replace("@__HOSTNAME__@", shlex.quote(dpu_name))
-    kickstart = kickstart.replace(
-        "@__SSH_PUBKEY__@", shlex.quote("\n".join(ssh_pubkey))
-    )
-    kickstart = kickstart.replace("@__DPU_IP4ADDRNET__@", common_dpu.dpu_ip4addrnet)
-    kickstart = kickstart.replace("@__HOST_IP4ADDR__@", common_dpu.host_ip4addr)
-    kickstart = kickstart.replace(
-        "@__NM_SECONDARY_CLONED_MAC_ADDRESS__@",
-        nm_secondary_cloned_mac_address,
-    )
-    kickstart = kickstart.replace(
-        "@__NM_SECONDARY_IP_ADDRESS__@",
-        ip_address,
-    )
-    kickstart = kickstart.replace(
-        "@__YUM_REPO_URL__@", shlex.quote(detect_yum_repo_url())
-    )
-    kickstart = kickstart.replace(
-        "@__YUM_REPO_ENABLED__@",
-        common.bool_to_str(yum_repo_enabled, format="1"),
-    )
-    kickstart = kickstart.replace(
-        "@__EXTRA_PACKAGES__@",
-        " ".join(shlex.quote(s) for s in extra_package),
-    )
-    kickstart = kickstart.replace(
-        "@__DEFAULT_EXTRA_PACKAGES__@",
-        "1" if default_extra_packages else "0",
-    )
-    kickstart = kickstart.replace(
-        "@__OCTEP_CP_AGENT_SERVICE_ENABLE__@",
-        common.bool_to_str(octep_cp_agent_service_enable, format="1"),
-    )
-
-    res = host.local.run(
-        [
-            "grep",
-            "-R",
-            "-h",
-            "^ *server ",
-            f"{host_path}/run/chrony-dhcp/",
-            f"{host_path}/etc/chrony.conf",
-        ]
-    )
-    kickstart = kickstart.replace("@__CHRONY_SERVERS__@", res.out)
-
-    for ks_lines in kickstart.splitlines(keepends=True):
-        logger.info(f"kickstart: {repr(ks_lines)}")
-
-    with open("/www/kickstart.ks", "w") as f:
-        f.write(kickstart)
-
-
 def setup_http(
     host_path: str,
     dpu_name: str,
@@ -422,7 +422,7 @@ def setup_http(
     os.makedirs("/www", exist_ok=True)
     host.local.run(f"ln -s {shlex.quote(iso_mount_path)} /www")
 
-    copy_kickstart(
+    IsoKindRhel.copy_kickstart(
         host_path,
         dpu_name,
         ssh_pubkey,
