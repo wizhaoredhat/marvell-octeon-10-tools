@@ -7,8 +7,6 @@ import shutil
 import time
 import typing
 
-from collections.abc import Iterable
-
 from ktoolbox import common
 from ktoolbox import host
 
@@ -94,20 +92,6 @@ def prepare_image(boot_device: str, img: typing.Optional[str]) -> str:
         logger.error(f"Couldn't find img file {shlex.quote(img)}")
         raise Exception(f"Invalid image path {shlex.quote(img)}")
     return img
-
-
-def wait_any_ping(hn: Iterable[str], timeout: float) -> str:
-    logger.info("Waiting for response from ping")
-    begin = time.time()
-    end = begin
-    hn = list(hn)
-    while end - begin < timeout:
-        for e in hn:
-            if common_dpu.ping(e):
-                return e
-        time.sleep(5)
-        end = time.time()
-    raise Exception(f"No response after {round(end - begin, 2)}s")
 
 
 def firmware_update(img_path: str, boot_device: str) -> None:

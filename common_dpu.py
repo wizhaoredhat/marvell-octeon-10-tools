@@ -82,14 +82,6 @@ def run_dhcpd() -> None:
     )
 
 
-def ping(hn: str) -> bool:
-    return host.local.run(
-        f"timeout 1 ping -4 -c 1 {shlex.quote(hn)}",
-        log_level=-1,
-        log_level_result=logging.DEBUG,
-    ).success
-
-
 cwd, basedir = common.path_basedir(__file__)
 
 
