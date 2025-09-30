@@ -56,6 +56,7 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         git-core \
         iproute \
         iputils \
+        jq \
         libconfig \
         minicom \
         nftables \
