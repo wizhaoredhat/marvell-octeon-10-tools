@@ -2,9 +2,11 @@
 
 import abc
 import argparse
+import collections.abc
 import dataclasses
 import datetime
 import itertools
+import logging
 import os
 import shlex
 import shutil
@@ -32,13 +34,68 @@ MNT_PATH = "/mnt/marvell_dpu_iso"
 WWW_PATH = "/www"
 
 
+@dataclasses.dataclass(frozen=True, **common.KW_ONLY_DATACLASS)
+class Config:
+    dpu_name: str = "marvell-dpu"
+    iso: str = "rhel:"
+    host_path: str = "/host"
+    cfg_host_mode: str = "auto"
+    dev: str = "eno4"
+    cfg_ssh_keys: Optional[tuple[str, ...]] = None
+    host_setup_only: bool = False
+    yum_repos: str = "none"
+    octep_cp_agent_service_enable: bool = True
+    nm_secondary_cloned_mac_address: str = ""
+    nm_secondary_ip_address: str = ""
+    nm_secondary_ip_gateway: str = ""
+    extra_packages: tuple[str, ...] = ()
+    default_extra_packages: bool = False
+    console_wait: float = 60.0
+    prompt: bool = False
+
+    def __post_init__(self) -> None:
+        if self.yum_repos not in ("none", "rhel-nightly"):
+            raise ValueError("yum_repos")
+        if self.cfg_host_mode not in ("auto", "rhel", "coreos", "ephemeral"):
+            raise ValueError("hostmode")
+
+
+@dataclasses.dataclass(frozen=True, **common.KW_ONLY_DATACLASS)
+class RunContext(common.ImmutableDataclass):
+    cfg: Config
+
+    def host_mode_set_once(self) -> None:
+        host_mode = self.cfg.cfg_host_mode
+        if host_mode == "auto":
+            host_mode = detect_host_mode(host_path=self.cfg.host_path)
+        self._field_set_once("host_mode", host_mode)
+
+    @property
+    def host_mode(self) -> str:
+        return self._field_get("host_mode", str)
+
+    def ssh_keys_set_once(self, ssh_keys: collections.abc.Iterable[str]) -> None:
+        self._field_set_once("ssh_keys", tuple(ssh_keys))
+
+    @property
+    def ssh_keys(self) -> tuple[str, ...]:
+        return self._field_get("ssh_keys", tuple)
+
+    def iso_kind_set_once(self, iso_kind: "IsoKind") -> None:
+        self._field_set_once("iso_kind", iso_kind)
+
+    @property
+    def iso_kind(self) -> "IsoKind":
+        val: IsoKind = self._field_get("iso_kind")
+        return val
+
+
 @dataclasses.dataclass(frozen=True)
 class IsoKind(abc.ABC):
     CHECK_FILES: typing.ClassVar[tuple[str, ...]]
 
     @staticmethod
     def detect_from_iso(
-        mount_path: str,
         *,
         read_check: bool = False,
     ) -> Optional["IsoKind"]:
@@ -46,7 +103,7 @@ class IsoKind(abc.ABC):
             iso_kind = iso_kind_type()
             if common_dpu.check_files(
                 iso_kind.CHECK_FILES,
-                cwd=mount_path,
+                cwd=MNT_PATH,
                 read_check=read_check,
             ):
                 return iso_kind
@@ -65,13 +122,13 @@ class IsoKindRhel(IsoKind):
     def copy_kickstart(
         host_path: str,
         dpu_name: str,
-        ssh_pubkey: list[str],
+        ssh_keys: tuple[str, ...],
         yum_repos: str,
         octep_cp_agent_service_enable: bool,
         nm_secondary_cloned_mac_address: str,
         nm_secondary_ip_address: str,
         nm_secondary_ip_gateway: str,
-        extra_package: list[str],
+        extra_packages: tuple[str, ...],
         default_extra_packages: bool,
     ) -> None:
         ip_address = ""
@@ -87,7 +144,7 @@ class IsoKindRhel(IsoKind):
 
         kickstart = kickstart.replace("@__HOSTNAME__@", shlex.quote(dpu_name))
         kickstart = kickstart.replace(
-            "@__SSH_PUBKEY__@", shlex.quote("\n".join(ssh_pubkey))
+            "@__SSH_PUBKEY__@", shlex.quote("\n".join(ssh_keys))
         )
         kickstart = kickstart.replace("@__DPU_IP4ADDRNET__@", common_dpu.dpu_ip4addrnet)
         kickstart = kickstart.replace("@__HOST_IP4ADDR__@", common_dpu.host_ip4addr)
@@ -108,7 +165,7 @@ class IsoKindRhel(IsoKind):
         )
         kickstart = kickstart.replace(
             "@__EXTRA_PACKAGES__@",
-            " ".join(shlex.quote(s) for s in extra_package),
+            " ".join(shlex.quote(s) for s in extra_packages),
         )
         kickstart = kickstart.replace(
             "@__DEFAULT_EXTRA_PACKAGES__@",
@@ -138,25 +195,25 @@ class IsoKindRhel(IsoKind):
             f.write(kickstart)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args() -> RunContext:
     parser = argparse.ArgumentParser(description="Process ISO file.")
     parser.add_argument(
         "iso",
         type=str,
         nargs="?",
-        default="rhel:",
+        default=Config.iso,
         help=f'Select the RHEL ISO to install. This can be a file name (make sure to map the host with `-v /:/host` and specify the path name starting with "/host"); it can be a HTTP URL (in which case the file will be downloaded to /host/root/rhel-iso-$NAME if such file does not exist yet); it can also be "rhel:9.x" which will automatically detect the right HTTP URL to download the latest iso. Default: "rhel:" to choose RHEL version {common_dpu.DEFAULT_RHEL_ISO}.',
     )
     parser.add_argument(
         "--dev",
         type=str,
-        default="eno4",
+        default=Config.dev,
         help="Optional argument of type string for device. Default is 'eno4'.",
     )
     parser.add_argument(
         "--host-path",
         type=str,
-        default="/host",
+        default=Config.host_path,
         help="Optional argument where the host filesystem is mounted. Default is '/host'. Run podman with \"-v /:/host\".",
     )
     parser.add_argument(
@@ -167,13 +224,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--yum-repos",
         choices=["none", "rhel-nightly"],
-        default="none",
+        default=Config.yum_repos,
         help='We generate "/etc/yum.repos.d/marvell-tools-beaker.repo" with latest RHEL9 nightly compose. However, that repo is disabled unless "--yum-repos=rhel-nightly".',
     )
     parser.add_argument(
         "--host-mode",
         choices=["auto", "rhel", "coreos", "ephemeral"],
-        default="auto",
+        default=Config.cfg_host_mode,
         help='How to treat the host. With "rhel" and "coreos" we configure a (persisted) NetworkManager connection profile for device (eno4). With "ephemeral"", this only configures an ad-hoc IP address with iproute. Port forwarding is always ephemeral via nft rules.',
     )
     parser.add_argument(
@@ -185,32 +242,32 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dpu-name",
         type=str,
-        default="marvell-dpu",
+        default=Config.dpu_name,
         help='The static hostname of the DPU. Defaults to "marvell-dpu". With "--host-mode" set to "rhel" or "coreos", this is also added to /etc/hosts alongside "dpu".',
     )
     parser.add_argument(
         "-W",
         "--console-wait",
         type=float,
-        default=60.0,
+        default=Config.console_wait,
         help='After installation is started, the tool will stay connected to the serial port for the specified amount of time. The benefit is that we see what happens in the output of the tool. The downside is that we cannot attach a second terminal to the serial port during that time. Defaults to 60 seconds. The console output is also written to "/tmp/pxeboot-serial.*.log".',
     )
     parser.add_argument(
         "--nm-secondary-cloned-mac-address",
         type=str,
-        default="",
+        default=Config.nm_secondary_cloned_mac_address,
         help='The MAC address to configure on the "enP2p2s0-dpu-secondary" profile.',
     )
     parser.add_argument(
         "--nm-secondary-ip-address",
         type=str,
-        default="",
+        default=Config.nm_secondary_ip_address,
         help='If set, configure a static ipv4.addresses on the profile "enP2p2s0-dpu-secondary". This should contain the subnet, for example "192.168.122.5/24".',
     )
     parser.add_argument(
         "--nm-secondary-ip-gateway",
         type=str,
-        default="",
+        default=Config.nm_secondary_ip_gateway,
         help='If set, configure ipv4.gateway on the "enP2p2s0-dpu-secondary" (requires "--nm-secondary-ip-address"). This should be in the same subnet as the address.',
     )
     parser.add_argument(
@@ -222,7 +279,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--octep-cp-agent-service-enable",
         action="store_true",
-        default=True,
+        default=Config.octep_cp_agent_service_enable,
         help='The opposite of "--octep-cp-agent-service-disable".',
     )
     parser.add_argument(
@@ -234,7 +291,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-i",
         "--extra-package",
-        default=[],
         action="append",
         help="List of extra packages that are installed during kickstart.",
     )
@@ -244,23 +300,44 @@ def parse_args() -> argparse.Namespace:
         help="If true, install additional default packages during kickstart. See '@__DEFAULT_EXTRA_PACKAGES__@' in \"manifests/pxeboot/kickstart.ks\".",
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    cfg = Config(
+        dpu_name=args.dpu_name,
+        iso=args.iso,
+        host_path=args.host_path,
+        cfg_host_mode=args.host_mode,
+        dev=args.dev,
+        cfg_ssh_keys=None if args.ssh_key is None else tuple(args.ssh_key),
+        host_setup_only=args.host_setup_only,
+        yum_repos=args.yum_repos,
+        octep_cp_agent_service_enable=args.octep_cp_agent_service_enable,
+        nm_secondary_cloned_mac_address=args.nm_secondary_cloned_mac_address,
+        nm_secondary_ip_address=args.nm_secondary_ip_address,
+        nm_secondary_ip_gateway=args.nm_secondary_ip_gateway,
+        extra_packages=tuple(args.extra_package or ()),
+        default_extra_packages=args.default_extra_packages,
+        console_wait=args.console_wait,
+        prompt=args.prompt,
+    )
+
+    ctx = RunContext(cfg=cfg)
+
+    return ctx
 
 
-def detect_host_mode(host_path: str, host_mode: str) -> str:
-    if host_mode == "auto":
-        if host.local.run(
-            [
-                "grep",
-                "-q",
-                'NAME="Red Hat Enterprise Linux"',
-                f"{host_path}/etc/os-release",
-            ]
-        ).success:
-            host_mode = "rhel"
-        else:
-            host_mode = "coreos"
-    return host_mode
+def detect_host_mode(*, host_path: str) -> str:
+    if host.local.run(
+        [
+            "grep",
+            "-q",
+            'NAME="Red Hat Enterprise Linux"',
+            f"{host_path}/etc/os-release",
+        ],
+        log_level_result=logging.INFO,
+    ):
+        return "rhel"
+    return "coreos"
 
 
 def wait_for_boot(timeout: float = 1800.0) -> None:
@@ -308,7 +385,7 @@ def create_serial() -> common.Serial:
     )
 
 
-def select_pxe_entry(console_wait: float = 60.0) -> None:
+def select_pxe_entry(ctx: RunContext) -> None:
     with create_serial() as ser:
         logger.info("waiting for instructions to access boot menu")
         ser.expect("Press 'B' within 10 seconds for boot menu", 30)
@@ -364,22 +441,22 @@ def select_pxe_entry(console_wait: float = 60.0) -> None:
 
         # Read and log the output for a bit longer. This way, we see how the
         # DPU starts installation.
-        ser.expect(pattern=None, timeout=console_wait)
+        ser.expect(pattern=None, timeout=ctx.cfg.console_wait)
         logger.info(f"Closing serial console {ser.port}")
 
 
-def write_hosts_entry(host_path: str, dpu_name: str) -> None:
+def write_hosts_entry(ctx: RunContext) -> None:
     common.etc_hosts_update_file(
         {
-            dpu_name: (common_dpu.dpu_ip4addr, ["dpu"]),
+            ctx.cfg.dpu_name: (common_dpu.dpu_ip4addr, ["dpu"]),
         },
-        f"{host_path}/etc/hosts",
+        f"{ctx.cfg.host_path}/etc/hosts",
     )
 
 
-def post_pxeboot(host_mode: str, host_path: str, dpu_name: str) -> None:
-    if host_mode in ("rhel", "coreos"):
-        write_hosts_entry(host_path, dpu_name)
+def post_pxeboot(ctx: RunContext) -> None:
+    if ctx.host_mode in ("rhel", "coreos"):
+        write_hosts_entry(ctx)
 
 
 def detect_yum_repo_url() -> str:
@@ -409,32 +486,21 @@ def detect_yum_repo_url() -> str:
     return ""
 
 
-def setup_http(
-    host_path: str,
-    dpu_name: str,
-    ssh_pubkey: list[str],
-    yum_repos: str,
-    octep_cp_agent_service_enable: bool,
-    nm_secondary_cloned_mac_address: str,
-    nm_secondary_ip_address: str,
-    nm_secondary_ip_gateway: str,
-    extra_package: list[str],
-    default_extra_packages: bool,
-) -> None:
+def setup_http(ctx: RunContext) -> None:
     os.makedirs(WWW_PATH, exist_ok=True)
     host.local.run(["ln", "-snf", MNT_PATH, f"{WWW_PATH}/marvell_dpu_iso"])
 
     IsoKindRhel.copy_kickstart(
-        host_path,
-        dpu_name,
-        ssh_pubkey,
-        yum_repos,
-        octep_cp_agent_service_enable,
-        nm_secondary_cloned_mac_address,
-        nm_secondary_ip_address,
-        nm_secondary_ip_gateway,
-        extra_package,
-        default_extra_packages,
+        ctx.cfg.host_path,
+        ctx.cfg.dpu_name,
+        ctx.ssh_keys,
+        ctx.cfg.yum_repos,
+        ctx.cfg.octep_cp_agent_service_enable,
+        ctx.cfg.nm_secondary_cloned_mac_address,
+        ctx.cfg.nm_secondary_ip_address,
+        ctx.cfg.nm_secondary_ip_gateway,
+        ctx.cfg.extra_packages,
+        ctx.cfg.default_extra_packages,
     )
 
     common_dpu.run_process(
@@ -450,7 +516,7 @@ def setup_http(
     )
 
 
-def setup_tftp() -> None:
+def setup_tftp(ctx: RunContext) -> None:
     logger.info("Configuring TFTP")
     os.makedirs(f"{TFTP_PATH}/pxelinux", exist_ok=True)
     logger.info("starting in.tftpd")
@@ -466,62 +532,57 @@ def setup_tftp() -> None:
     )
 
 
-def prepare_host(
-    host_mode: str,
-    dev: str,
-    host_path: str,
-    ssh_key: Optional[list[str]],
-) -> list[str]:
-    if host_mode in ("rhel", "coreos"):
+def prepare_host(ctx: RunContext) -> list[str]:
+    if ctx.host_mode in ("rhel", "coreos"):
         common_dpu.nmcli_setup_mngtiface(
-            ifname=dev,
-            chroot_path=host_path,
+            ifname=ctx.cfg.dev,
+            chroot_path=ctx.cfg.host_path,
             ip4addr=common_dpu.host_ip4addrnet,
         )
     else:
         host.local.run(
-            f"ip addr add {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(dev)}"
+            f"ip addr add {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(ctx.cfg.dev)}"
         )
 
-    common_dpu.nft_masquerade(ifname=dev, subnet=common_dpu.dpu_subnet)
+    common_dpu.nft_masquerade(ifname=ctx.cfg.dev, subnet=common_dpu.dpu_subnet)
     host.local.run("sysctl -w net.ipv4.ip_forward=1")
 
-    ssh_pubkey = []
+    ssh_keys = []
 
     add_host_key = True
-    if ssh_key:
+    if ctx.cfg.cfg_ssh_keys:
         add_host_key = False
-        for s in ssh_key:
+        for s in ctx.cfg.cfg_ssh_keys:
             if not s:
                 add_host_key = True
             else:
-                ssh_pubkey.append(s)
+                ssh_keys.append(s)
 
     if add_host_key:
         ssh_privkey_file = common_dpu.ssh_generate_key(
-            host_path,
+            ctx.cfg.host_path,
             create=True,
         )
         if ssh_privkey_file is not None:
             logger.info(f"prepare-host: add host key {repr(ssh_privkey_file)}")
-            ssh_pubkey.append(common_dpu.ssh_read_pubkey(ssh_privkey_file))
+            ssh_keys.append(common_dpu.ssh_read_pubkey(ssh_privkey_file))
 
-    if not ssh_pubkey:
+    if not ssh_keys:
         logger.info("prepare-host: no SSH keys")
     else:
-        for k in ssh_pubkey:
+        for k in ssh_keys:
             logger.info(f"prepare-host: use SSH key {repr(k)}")
 
-    return ssh_pubkey
+    return ssh_keys
 
 
-def setup_dhcp() -> None:
+def setup_dhcp(ctx: RunContext) -> None:
     common_dpu.run_dhcpd()
 
 
-def create_and_mount_iso(iso: str, host_path: str) -> IsoKind:
+def create_and_mount_iso(ctx: RunContext) -> IsoKind:
     is_retry = False
-    iso2 = iso
+    iso2 = ctx.cfg.iso
     while True:
 
         # We set `force=is_retry`. On retry (a second run of the loop) we will
@@ -529,7 +590,7 @@ def create_and_mount_iso(iso: str, host_path: str) -> IsoKind:
         # might accept an existing file on disk.
         iso_path, iso_url, cached_http_file = common_dpu.create_iso_file(
             iso2,
-            chroot_path=host_path,
+            chroot_path=ctx.cfg.host_path,
             force=is_retry,
         )
 
@@ -538,7 +599,7 @@ def create_and_mount_iso(iso: str, host_path: str) -> IsoKind:
             mount_path=MNT_PATH,
         )
         if success:
-            iso_kind = IsoKind.detect_from_iso(MNT_PATH, read_check=True)
+            iso_kind = IsoKind.detect_from_iso(read_check=True)
             if iso_kind is not None:
                 logger.info(
                     f"ISO {iso_path} successfully mounted at {MNT_PATH} (as {iso_kind})"
@@ -553,53 +614,45 @@ def create_and_mount_iso(iso: str, host_path: str) -> IsoKind:
             #
             # But on retry, or if this was not a HTTP URL, this is a fatal
             # error.
-            logger.error(f"Failure to mount iso {iso}")
-            raise RuntimeError(f"Failure to mount ISO {iso}")
+            logger.error(f"Failure to mount ISO {ctx.cfg.iso!r}")
+            raise RuntimeError(f"Failure to mount ISO {ctx.cfg.iso!r}")
 
         iso2 = common.unwrap(iso_url)
         is_retry = True
         logger.warning(f"ISO {iso_path} seems broken. Try re-downloading {iso2}")
 
 
-def dpu_pxeboot(
-    *,
-    console_wait: float,
-) -> None:
+def dpu_pxeboot(ctx: RunContext) -> None:
     logger.info("Resetting card")
     reset()
-    select_pxe_entry(console_wait)
-    wait_for_boot(max(console_wait + 100.0, 1800.0))
+    select_pxe_entry(ctx)
+    wait_for_boot(max(ctx.cfg.console_wait + 100.0, 1800.0))
 
 
 def main() -> None:
     logger.info(f"pxeboot: {shlex.join(shlex.quote(s) for s in sys.argv)}")
-    args = parse_args()
-    host_mode = detect_host_mode(args.host_path, args.host_mode)
-    logger.info("Preparing services for Pxeboot")
-    ssh_pubkey = prepare_host(host_mode, args.dev, args.host_path, args.ssh_key)
+    ctx = parse_args()
+    logger.info(f"pxeboot run context: {ctx}")
 
-    if not args.host_setup_only:
-        create_and_mount_iso(iso=args.iso, host_path=args.host_path)
-        setup_dhcp()
-        setup_tftp()
-        setup_http(
-            args.host_path,
-            args.dpu_name,
-            ssh_pubkey,
-            args.yum_repos,
-            args.octep_cp_agent_service_enable,
-            args.nm_secondary_cloned_mac_address,
-            args.nm_secondary_ip_address,
-            args.nm_secondary_ip_gateway,
-            args.extra_package,
-            args.default_extra_packages,
-        )
+    ctx.host_mode_set_once()
+
+    logger.info("Preparing services for Pxeboot")
+    ssh_keys = prepare_host(ctx)
+
+    ctx.ssh_keys_set_once(ssh_keys)
+
+    if not ctx.cfg.host_setup_only:
+        iso_kind = create_and_mount_iso(ctx)
+        ctx.iso_kind_set_once(iso_kind)
+        setup_dhcp(ctx)
+        setup_tftp(ctx)
+        setup_http(ctx)
         logger.info("Giving services time to settle")
         time.sleep(3)
 
         common_dpu.check_services_running()
 
-        if args.prompt:
+        if ctx.cfg.prompt:
             input(
                 "dhcp/tftp/http services started. Waiting. Press ENTER to continue or abort with CTRL+C"
             )
@@ -607,7 +660,7 @@ def main() -> None:
         for try_count in itertools.count(start=1):
             logger.info(f"Starting UEFI PXE Boot (try {try_count})")
             try:
-                dpu_pxeboot(console_wait=args.console_wait)
+                dpu_pxeboot(ctx)
             except Exception as e:
                 if try_count >= 3:
                     raise RuntimeError(f"Failure to pxeboot: {e}") from e
@@ -615,17 +668,19 @@ def main() -> None:
                 continue
             break
 
-    post_pxeboot(host_mode, args.host_path, args.dpu_name)
+    post_pxeboot(ctx)
 
     logger.info("Terminating http, tftp, and dhcpd")
     common.thread_list_join_all()
 
-    if args.host_setup_only:
-        host_setup_only = " (host-setup-only)"
+    if ctx.cfg.host_setup_only:
+        host_setup_only_msg = " (host-setup-only)"
     else:
-        host_setup_only = ""
+        host_setup_only_msg = ""
 
-    logger.info(f"SUCCESS{host_setup_only}. Try `ssh root@{common_dpu.dpu_ip4addr}`")
+    logger.info(
+        f"SUCCESS{host_setup_only_msg}. Try `ssh root@{common_dpu.dpu_ip4addr}`"
+    )
 
 
 if __name__ == "__main__":
