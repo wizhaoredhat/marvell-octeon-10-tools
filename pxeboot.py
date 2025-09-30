@@ -27,7 +27,9 @@ from common_dpu import logger
 from reset import reset
 
 
-iso_mount_path = "/mnt/marvell_dpu_iso"
+TFTP_PATH = "/var/lib/tftpboot"
+MNT_PATH = "/mnt/marvell_dpu_iso"
+WWW_PATH = "/www"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -132,7 +134,7 @@ class IsoKindRhel(IsoKind):
         for ks_lines in kickstart.splitlines(keepends=True):
             logger.info(f"kickstart: {repr(ks_lines)}")
 
-        with open("/www/kickstart.ks", "w") as f:
+        with open(f"{WWW_PATH}/kickstart.ks", "w") as f:
             f.write(kickstart)
 
 
@@ -386,7 +388,7 @@ def detect_yum_repo_url() -> str:
             "sed",
             "-n",
             "s/^name=Red Hat Enterprise Linux \\([0-9]\\+\\.[0-9]\\+\\).0$/\\1/p",
-            f"{iso_mount_path}/media.repo",
+            f"{MNT_PATH}/media.repo",
         ]
     )
     if res.success and res.out:
@@ -419,8 +421,8 @@ def setup_http(
     extra_package: list[str],
     default_extra_packages: bool,
 ) -> None:
-    os.makedirs("/www", exist_ok=True)
-    host.local.run(f"ln -s {shlex.quote(iso_mount_path)} /www")
+    os.makedirs(WWW_PATH, exist_ok=True)
+    host.local.run(["ln", "-snf", MNT_PATH, f"{WWW_PATH}/marvell_dpu_iso"])
 
     IsoKindRhel.copy_kickstart(
         host_path,
@@ -442,7 +444,7 @@ def setup_http(
             "-m",
             "http.server",
             "-d",
-            "/www",
+            WWW_PATH,
             "24380",
         ],
     )
@@ -450,21 +452,17 @@ def setup_http(
 
 def setup_tftp() -> None:
     logger.info("Configuring TFTP")
-    os.makedirs("/var/lib/tftpboot/pxelinux", exist_ok=True)
+    os.makedirs(f"{TFTP_PATH}/pxelinux", exist_ok=True)
     logger.info("starting in.tftpd")
     host.local.run("killall in.tftpd")
     common_dpu.run_process("tftp", "/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
-    shutil.copy(
-        f"{iso_mount_path}/images/pxeboot/vmlinuz", "/var/lib/tftpboot/pxelinux"
-    )
-    shutil.copy(
-        f"{iso_mount_path}/images/pxeboot/initrd.img", "/var/lib/tftpboot/pxelinux"
-    )
-    shutil.copy(f"{iso_mount_path}/EFI/BOOT/grubaa64.efi", "/var/lib/tftpboot/")
-    os.chmod("/var/lib/tftpboot/grubaa64.efi", 0o744)
+    shutil.copy(f"{MNT_PATH}/images/pxeboot/vmlinuz", f"{TFTP_PATH}/pxelinux")
+    shutil.copy(f"{MNT_PATH}/images/pxeboot/initrd.img", f"{TFTP_PATH}/pxelinux")
+    shutil.copy(f"{MNT_PATH}/EFI/BOOT/grubaa64.efi", f"{TFTP_PATH}/")
+    os.chmod(f"{TFTP_PATH}/grubaa64.efi", 0o744)
     shutil.copy(
         common_dpu.packaged_file("manifests/pxeboot/grub.cfg"),
-        "/var/lib/tftpboot/grub.cfg",
+        f"{TFTP_PATH}/grub.cfg",
     )
 
 
@@ -537,16 +535,16 @@ def create_and_mount_iso(iso: str, host_path: str) -> IsoKind:
 
         success = common_dpu.mount_iso(
             iso_path,
-            mount_path=iso_mount_path,
+            mount_path=MNT_PATH,
         )
         if success:
-            iso_kind = IsoKind.detect_from_iso(iso_mount_path, read_check=True)
+            iso_kind = IsoKind.detect_from_iso(MNT_PATH, read_check=True)
             if iso_kind is not None:
                 logger.info(
-                    f"ISO {iso_path} successfully mounted at {iso_mount_path} (as {iso_kind})"
+                    f"ISO {iso_path} successfully mounted at {MNT_PATH} (as {iso_kind})"
                 )
                 return iso_kind
-            host.local.run(["umount", iso_mount_path])
+            host.local.run(["umount", MNT_PATH])
 
         if is_retry or not cached_http_file:
             # On first try, if the ISO was found on disk (and the path was a
