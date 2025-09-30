@@ -123,6 +123,10 @@ class IsoKind(abc.ABC):
     def __str__(self) -> str:
         return self.NAME
 
+    @abc.abstractmethod
+    def setup_http_files(self, ctx: RunContext) -> None:
+        pass
+
 
 class IsoKindRhel(IsoKind):
     NAME = "rhel"
@@ -133,39 +137,27 @@ class IsoKindRhel(IsoKind):
         "media.repo",
     )
 
-    @staticmethod
-    def copy_kickstart(
-        host_path: str,
-        dpu_name: str,
-        ssh_keys: tuple[str, ...],
-        yum_repos: str,
-        octep_cp_agent_service_enable: bool,
-        nm_secondary_cloned_mac_address: str,
-        nm_secondary_ip_address: str,
-        nm_secondary_ip_gateway: str,
-        extra_packages: tuple[str, ...],
-        default_extra_packages: bool,
-    ) -> None:
+    def setup_http_files(self, ctx: RunContext) -> None:
         ip_address = ""
-        if nm_secondary_ip_address:
-            ip_address = f"address1={nm_secondary_ip_address}"
-            if nm_secondary_ip_gateway:
-                ip_address += f",{nm_secondary_ip_gateway}"
+        if ctx.cfg.nm_secondary_ip_address:
+            ip_address = f"address1={ctx.cfg.nm_secondary_ip_address}"
+            if ctx.cfg.nm_secondary_ip_gateway:
+                ip_address += f",{ctx.cfg.nm_secondary_ip_gateway}"
 
         with open(common_dpu.packaged_file("manifests/pxeboot/kickstart.ks"), "r") as f:
             kickstart = f.read()
 
-        yum_repo_enabled = yum_repos == "rhel-nightly"
+        yum_repo_enabled = ctx.cfg.yum_repos == "rhel-nightly"
 
-        kickstart = kickstart.replace("@__HOSTNAME__@", shlex.quote(dpu_name))
+        kickstart = kickstart.replace("@__HOSTNAME__@", shlex.quote(ctx.cfg.dpu_name))
         kickstart = kickstart.replace(
-            "@__SSH_PUBKEY__@", shlex.quote("\n".join(ssh_keys))
+            "@__SSH_PUBKEY__@", shlex.quote("\n".join(ctx.ssh_keys))
         )
         kickstart = kickstart.replace("@__DPU_IP4ADDRNET__@", common_dpu.dpu_ip4addrnet)
         kickstart = kickstart.replace("@__HOST_IP4ADDR__@", common_dpu.host_ip4addr)
         kickstart = kickstart.replace(
             "@__NM_SECONDARY_CLONED_MAC_ADDRESS__@",
-            nm_secondary_cloned_mac_address,
+            ctx.cfg.nm_secondary_cloned_mac_address,
         )
         kickstart = kickstart.replace(
             "@__NM_SECONDARY_IP_ADDRESS__@",
@@ -180,15 +172,15 @@ class IsoKindRhel(IsoKind):
         )
         kickstart = kickstart.replace(
             "@__EXTRA_PACKAGES__@",
-            " ".join(shlex.quote(s) for s in extra_packages),
+            " ".join(shlex.quote(s) for s in ctx.cfg.extra_packages),
         )
         kickstart = kickstart.replace(
             "@__DEFAULT_EXTRA_PACKAGES__@",
-            "1" if default_extra_packages else "0",
+            common.bool_to_str(ctx.cfg.default_extra_packages, format="1"),
         )
         kickstart = kickstart.replace(
             "@__OCTEP_CP_AGENT_SERVICE_ENABLE__@",
-            common.bool_to_str(octep_cp_agent_service_enable, format="1"),
+            common.bool_to_str(ctx.cfg.octep_cp_agent_service_enable, format="1"),
         )
 
         res = host.local.run(
@@ -197,8 +189,8 @@ class IsoKindRhel(IsoKind):
                 "-R",
                 "-h",
                 "^ *server ",
-                f"{host_path}/run/chrony-dhcp/",
-                f"{host_path}/etc/chrony.conf",
+                f"{ctx.cfg.host_path}/run/chrony-dhcp/",
+                f"{ctx.cfg.host_path}/etc/chrony.conf",
             ]
         )
         kickstart = kickstart.replace("@__CHRONY_SERVERS__@", res.out)
@@ -530,18 +522,7 @@ def setup_http(ctx: RunContext) -> None:
     os.makedirs(WWW_PATH, exist_ok=True)
     host.local.run(["ln", "-snf", MNT_PATH, f"{WWW_PATH}/marvell_dpu_iso"])
 
-    IsoKindRhel.copy_kickstart(
-        ctx.cfg.host_path,
-        ctx.cfg.dpu_name,
-        ctx.ssh_keys,
-        ctx.cfg.yum_repos,
-        ctx.cfg.octep_cp_agent_service_enable,
-        ctx.cfg.nm_secondary_cloned_mac_address,
-        ctx.cfg.nm_secondary_ip_address,
-        ctx.cfg.nm_secondary_ip_gateway,
-        ctx.cfg.extra_packages,
-        ctx.cfg.default_extra_packages,
-    )
+    ctx.iso_kind.setup_http_files(ctx)
 
     common_dpu.run_process(
         "httpd",
