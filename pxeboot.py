@@ -124,6 +124,10 @@ class IsoKind(abc.ABC):
         return self.NAME
 
     @abc.abstractmethod
+    def setup_tftp_files(self) -> None:
+        pass
+
+    @abc.abstractmethod
     def setup_http_files(self, ctx: RunContext) -> None:
         pass
 
@@ -136,6 +140,16 @@ class IsoKindRhel(IsoKind):
         "images/pxeboot/vmlinuz",
         "media.repo",
     )
+
+    def setup_tftp_files(self) -> None:
+        shutil.copy(f"{MNT_PATH}/images/pxeboot/vmlinuz", f"{TFTP_PATH}/pxelinux")
+        shutil.copy(f"{MNT_PATH}/images/pxeboot/initrd.img", f"{TFTP_PATH}/pxelinux")
+        shutil.copy(f"{MNT_PATH}/EFI/BOOT/grubaa64.efi", f"{TFTP_PATH}/")
+        os.chmod(f"{TFTP_PATH}/grubaa64.efi", 0o744)
+        shutil.copy(
+            common_dpu.packaged_file("manifests/pxeboot/grub.cfg.rhel"),
+            f"{TFTP_PATH}/grub.cfg",
+        )
 
     def setup_http_files(self, ctx: RunContext) -> None:
         ip_address = ""
@@ -542,15 +556,11 @@ def setup_tftp(ctx: RunContext) -> None:
     os.makedirs(f"{TFTP_PATH}/pxelinux", exist_ok=True)
     logger.info("starting in.tftpd")
     host.local.run("killall in.tftpd")
-    common_dpu.run_process("tftp", "/usr/sbin/in.tftpd -s -B 1468 -L /var/lib/tftpboot")
-    shutil.copy(f"{MNT_PATH}/images/pxeboot/vmlinuz", f"{TFTP_PATH}/pxelinux")
-    shutil.copy(f"{MNT_PATH}/images/pxeboot/initrd.img", f"{TFTP_PATH}/pxelinux")
-    shutil.copy(f"{MNT_PATH}/EFI/BOOT/grubaa64.efi", f"{TFTP_PATH}/")
-    os.chmod(f"{TFTP_PATH}/grubaa64.efi", 0o744)
-    shutil.copy(
-        common_dpu.packaged_file("manifests/pxeboot/grub.cfg"),
-        f"{TFTP_PATH}/grub.cfg",
+    common_dpu.run_process(
+        "tftp",
+        f"/usr/sbin/in.tftpd -v -v -s -B 1468 -L {shlex.quote(TFTP_PATH)}",
     )
+    ctx.iso_kind.setup_tftp_files()
 
 
 def prepare_host(ctx: RunContext) -> list[str]:
