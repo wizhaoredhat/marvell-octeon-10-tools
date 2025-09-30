@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import datetime
 import itertools
 import os
 import shlex
@@ -79,7 +80,7 @@ def parse_args() -> argparse.Namespace:
         "--console-wait",
         type=float,
         default=60.0,
-        help="After installation is started, the tool will stay connected to the serial port for the specified amount of time. The benefit is that we see what happens in the output of the tool. The downside is that we cannot attach a second terminal to the serial port during that time. Defaults to 60 seconds.",
+        help='After installation is started, the tool will stay connected to the serial port for the specified amount of time. The benefit is that we see what happens in the output of the tool. The downside is that we cannot attach a second terminal to the serial port during that time. Defaults to 60 seconds. The console output is also written to "/tmp/pxeboot-serial.*.log".',
     )
     parser.add_argument(
         "--nm-secondary-cloned-mac-address",
@@ -165,10 +166,28 @@ def wait_for_boot(timeout: float = 1800.0) -> None:
             )
 
 
-def select_pxe_entry(console_wait: float = 60.0) -> None:
-    logger.info("selecting pxe entry")
+def create_serial() -> common.Serial:
+    # We also write the data from the serial port to "/tmp/pxeboot-serial-*.log"
+    # on the host. For debugging, you can find what was written there.
+    log_stream_filename = (
+        f"/tmp/pxeboot-serial.{datetime.datetime.now():%Y%m%d-%H%M%S.%f}.log"
+    )
 
-    with common.Serial(common_dpu.TTYUSB0) as ser:
+    logger.info(
+        f"Select entry and boot in {common_dpu.TTYUSB0} (log to {log_stream_filename})"
+    )
+
+    log_stream = open(log_stream_filename, "ab", buffering=0)
+
+    return common.Serial(
+        common_dpu.TTYUSB0,
+        log_stream=log_stream,
+        own_log_stream=True,
+    )
+
+
+def select_pxe_entry(console_wait: float = 60.0) -> None:
+    with create_serial() as ser:
         logger.info("waiting for instructions to access boot menu")
         ser.expect("Press 'B' within 10 seconds for boot menu", 30)
         time.sleep(1)
