@@ -340,13 +340,18 @@ def detect_host_mode(*, host_path: str) -> str:
     return "coreos"
 
 
-def wait_for_boot(timeout: float = 1800.0) -> None:
+def wait_for_boot(ctx: RunContext, ser: common.Serial) -> None:
+    has_ser = True
+    time_start = time.monotonic()
+    timeout = max(ctx.cfg.console_wait + 100.0, 1800.0)
     logger.info(f"Wait for boot and IP address {common_dpu.dpu_ip4addr}")
-    end = time.monotonic() + timeout
     sleep_time = 60
     while True:
-        time.sleep(sleep_time)
-        sleep_time = max(int(sleep_time / 1.3), 9)
+
+        if has_ser and time.monotonic() > time_start + ctx.cfg.console_wait:
+            logger.info(f"Closing serial console {ser.port}")
+            has_ser = False
+
         # We rely on configuring a static IP address on the installed host.
         #
         # For one, to always have that IP address there (even after there
@@ -359,10 +364,20 @@ def wait_for_boot(timeout: float = 1800.0) -> None:
         if netdev.wait_ping(common_dpu.dpu_ip4addr) is not None:
             logger.info(f"got response from {common_dpu.dpu_ip4addr}")
             break
-        if time.monotonic() > end:
+
+        if time.monotonic() > time_start + timeout:
             raise RuntimeError(
                 f"Failed to detect IP {common_dpu.dpu_ip4addr} on Marvell card"
             )
+
+        if has_ser:
+            # Read and log the output for a bit longer. This way, we see how the
+            # DPU starts installation.
+            ser.expect(pattern=None, timeout=sleep_time)
+        else:
+            time.sleep(sleep_time)
+
+        sleep_time = max(int(sleep_time / 1.3), 9)
 
 
 def create_serial() -> common.Serial:
@@ -385,64 +400,58 @@ def create_serial() -> common.Serial:
     )
 
 
-def select_pxe_entry(ctx: RunContext) -> None:
-    with create_serial() as ser:
-        logger.info("waiting for instructions to access boot menu")
-        ser.expect("Press 'B' within 10 seconds for boot menu", 30)
-        time.sleep(1)
-        logger.info("Pressing B to access boot menu")
-        ser.send("b")
-        logger.info("waiting for instructions to Boot from Secondary Boot Device")
-        ser.expect("2\\) Boot from Secondary Boot Device", 10)
-        time.sleep(1)
-        ser.send("2")
-        logger.info("waiting to escape to UEFI boot menu")
-        ser.expect("Press ESCAPE for boot options", 60)
-        logger.info("Sending escape 5 times")
-        ser.send(ESC * 5)
-        logger.info("waiting on language option")
-        ser.expect(
-            "This is the option.*one adjusts to change.*the language for the.*current system",
-            3,
-        )
-        logger.info("pressing down")
+def select_pxe_entry(ctx: RunContext, ser: common.Serial) -> None:
+    logger.info("waiting for instructions to access boot menu")
+    ser.expect("Press 'B' within 10 seconds for boot menu", 30)
+    time.sleep(1)
+    logger.info("Pressing B to access boot menu")
+    ser.send("b")
+    logger.info("waiting for instructions to Boot from Secondary Boot Device")
+    ser.expect("2\\) Boot from Secondary Boot Device", 10)
+    time.sleep(1)
+    ser.send("2")
+    logger.info("waiting to escape to UEFI boot menu")
+    ser.expect("Press ESCAPE for boot options", 60)
+    logger.info("Sending escape 5 times")
+    ser.send(ESC * 5)
+    logger.info("waiting on language option")
+    ser.expect(
+        "This is the option.*one adjusts to change.*the language for the.*current system",
+        3,
+    )
+    logger.info("pressing down")
+    ser.send(KEY_DOWN)
+    time.sleep(1)
+    logger.info("pressing down again")
+    ser.send(KEY_DOWN)
+    logger.info("waiting for Boot manager entry")
+    ser.expect("This selection will.*take you to the Boot.*Manager", 3)
+    ser.send(KEY_ENTER)
+    ser.expect("Device Path")
+    retry = 30
+    logger.info(f"Trying up to {retry} times to find pxe boot interface")
+    while retry:
         ser.send(KEY_DOWN)
-        time.sleep(1)
-        logger.info("pressing down again")
-        ser.send(KEY_DOWN)
-        logger.info("waiting for Boot manager entry")
-        ser.expect("This selection will.*take you to the Boot.*Manager", 3)
+        try:
+            # TODO: FIXME: We need to read the port configuration.
+            # e.g. 80AA99887766 + number of lanes used in the SERDES
+            ser.expect("UEFI PXEv4.*MAC:80AA99887767", 0.5)
+            break
+        except Exception:
+            retry -= 1
+    if not retry:
+        e = Exception("Didn't find boot interface")
+        logger.info(e)
+        raise e
+    else:
+        logger.info(f"Found boot interface after {30 - retry} tries, sending enter")
         ser.send(KEY_ENTER)
-        ser.expect("Device Path")
-        retry = 30
-        logger.info(f"Trying up to {retry} times to find pxe boot interface")
-        while retry:
-            ser.send(KEY_DOWN)
-            try:
-                # TODO: FIXME: We need to read the port configuration.
-                # e.g. 80AA99887766 + number of lanes used in the SERDES
-                ser.expect("UEFI PXEv4.*MAC:80AA99887767", 0.5)
-                break
-            except Exception:
-                retry -= 1
-        if not retry:
-            e = Exception("Didn't find boot interface")
-            logger.info(e)
-            raise e
-        else:
-            logger.info(f"Found boot interface after {30 - retry} tries, sending enter")
-            ser.send(KEY_ENTER)
-            time.sleep(10)
-            # Use the ^ and v keys to select which entry is highlighted.
-            # Press enter to boot the selected OS, `e' to edit the commands
-            # before booting or `c' for a command-line.
-            # time.sleep(1)
-            # timeout = 30
-
-        # Read and log the output for a bit longer. This way, we see how the
-        # DPU starts installation.
-        ser.expect(pattern=None, timeout=ctx.cfg.console_wait)
-        logger.info(f"Closing serial console {ser.port}")
+        time.sleep(10)
+        # Use the ^ and v keys to select which entry is highlighted.
+        # Press enter to boot the selected OS, `e' to edit the commands
+        # before booting or `c' for a command-line.
+        # time.sleep(1)
+        # timeout = 30
 
 
 def write_hosts_entry(ctx: RunContext) -> None:
@@ -625,8 +634,9 @@ def create_and_mount_iso(ctx: RunContext) -> IsoKind:
 def dpu_pxeboot(ctx: RunContext) -> None:
     logger.info("Resetting card")
     reset()
-    select_pxe_entry(ctx)
-    wait_for_boot(max(ctx.cfg.console_wait + 100.0, 1800.0))
+    with create_serial() as ser:
+        select_pxe_entry(ctx, ser)
+        wait_for_boot(ctx, ser)
 
 
 def main() -> None:
