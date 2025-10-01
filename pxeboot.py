@@ -78,6 +78,7 @@ def parse_args() -> argparse.Namespace:
         help='The static hostname of the DPU. Defaults to "marvell-dpu". With "--host-mode" set to "rhel" or "coreos", this is also added to /etc/hosts alongside "dpu".',
     )
     parser.add_argument(
+        "-W",
         "--console-wait",
         type=float,
         default=60.0,
