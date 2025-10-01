@@ -135,3 +135,173 @@ sudo podman run --pull always --rm --replace --privileged --pid host --network h
   `ifconfig` and `dhcpd` programs.
   Run `$ ip addr del 192.168.122.101/32 dev br-ex scope global label vip ; ip addr add 192.168.122.101/32 dev br-ex scope global`
   and retry.
+
+### Add Marvell DPU as Openshift Node running Red Hat CoreOS
+
+#### Preparation
+
+1) Potential problem: The Red Hat CI clusters are usually configured for a two-cluster setup. In
+this case, the DPU's secondary interface (`enP2p2s0`) is connected to an
+interface on the provisioning host (usually `eno12409`). There we have address
+172.16.3.1/24 and a dhcpd service running.  This provides the DPU with an
+address. Also, we tend to configure NAT, so the DPU can actually reach
+192.168.122.1 (where AssistedInstaller is listening). However, the DPU cannot
+reach 192.168.122.99. We may want to connect the DPU's secondary interface to
+the same network as the Openshift cluster. For example:
+```bash
+# On provisioning host:
+ip addr del 172.16.3.1/24 dev eno12409
+ip link set eno12409 master virbr0
+systemctl restart dhcpd
+
+# Reactivate profile on DPU (or boot RHCOS ISO afterwards).
+# Note that we got a suitable 192.168.122.0/24 address to
+# directly reach the OCP cluster.
+```
+
+2) Potential problem: the MAC address on the DPU may be random. That causes problems
+because RHCOS wants to boot with `ip=$MAC:dhcp` on the command line. If the MAC address
+is wrong, it cannot boot. Workaround: enter the grub menu and edit to `ip:dhcp`. Proper
+solution is to [configure a fixed MAC address](docs/howto_fix_mac_addresses.txt).
+
+#### Add Node
+
+1) Assume we have Assisted Installer running and the cluster already created. Find the cluster ID with
+```bash
+aicli -u 0.0.0.0:8090 list clusters
+
+AI_URL="http://127.0.0.1:8090"
+CLUSTER_ID=$(curl -s -X GET "$AI_URL/api/assisted-install/v2/clusters?with_hosts=true" -H "accept: application/json" -H "get_unregistered_clusters: false"| jq -r '.[].id')
+echo "$CLUSTER_ID"
+```
+
+2) Create new infraenv to get the download URL for the discovery ISO via
+```bash
+aicli -u 0.0.0.0:8090 list infraenvs
+
+OUT="$(
+    curl -X POST "$AI_URL/api/assisted-install/v2/infra-envs" -H "Content-Type: application/json" -d '{
+        "name": "arm64-infra-env",
+        "cluster_id": "'"$CLUSTER_ID"'",
+        "cpu_architecture": "arm64",
+        "pull_secret": "'$(cat ~/pull_secret.json | sed 's/"/\\"/g')'"
+      }'
+    )"
+
+echo "$OUT" | jq
+DOWNLOAD_URL="$(jq -r '.download_url' <<< "$OUT")"
+INFRAENV_ID="$(jq -r '.id' <<< "$OUT")"
+printf 'DOWNLOAD_URL=%q\n' "$DOWNLOAD_URL"
+printf 'INFRAENV_ID=%q\n' "$INFRAENV_ID"
+
+aicli -u 0.0.0.0:8090 info infraenv "$INFRAENV_ID"
+```
+
+3) Run pxeboot command on Marvell Host like
+```bash
+IMAGE=quay.io/sdaniele/marvell-tools:latest
+podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it \
+    "$IMAGE" \
+    ./pxeboot.py \
+    "$DOWNLOAD_URL" \
+    --ssh-key '' \
+    --ssh-key "$(ls -1 ~/.ssh/id*pub | xargs -n1 cat)"
+```
+
+4) Wait, then you should see the new host in
+```bash
+aicli -u 0.0.0.0:8090 list hosts
+
+HOST_ID="$(aicli -u 0.0.0.0:8090 list host | grep " arm64-infra-env " | awk '{ print $4 }')"
+printf 'HOST_ID=%q\n' "$HOST_ID"
+```
+
+5) Check status via
+```bash
+aicli -u 0.0.0.0:8090 info host "$HOST_ID"
+```
+Look out for problems. In particular connectivity problems. The DPU must reach
+the Assisted Installer IP address and also the OCP clusters network (in our
+setups usually 192.168.122.0/24). Check preparation steps above.
+
+6) Set Hostname for new node:
+```bash
+NEW_HOSTNAME=...
+
+aicli -u 0.0.0.0:8090 update host "$HOST_ID" -P requested_hostname="$NEW_HOSTNAME"
+
+HOST_NAME="$(aicli -u 0.0.0.0:8090 list host | grep "$HOST_ID" | awk '{ print $2 }')"
+printf 'HOST_NAME=%q\n' "$HOST_NAME"
+```
+
+7) Configure hugepages
+```bash
+cat << EOF | oc apply -f -
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfigPool
+metadata:
+  name: dpu-specific-marvell
+spec:
+  nodeSelector:
+    matchExpressions:
+      - key: dpu.config.openshift.io/dpuside
+        operator: In
+        values:
+          - dpu
+      - key: kubernetes.io/hostname
+        operator: In
+        values:
+          - "$HOST_NAME"
+  machineConfigSelector:
+    matchExpressions:
+      - key: machineconfiguration.openshift.io/role
+        operator: In
+        values:
+          - worker
+          - dpu-specific-marvell
+  maxUnavailable: 1
+EOF
+
+cat << EOF | oc apply -f -
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-dpu-marvell-kargs-hugepages
+  labels:
+    machineconfiguration.openshift.io/role: dpu-specific-marvell
+spec:
+  kernelArguments:
+    - default_hugepagesz=32M
+    - hugepagesz=32M
+    - hugepages=32
+  config:
+    ignition:
+      version: 3.4.0
+EOF
+```
+
+8) Start installation of host
+```bash
+aicli -u 0.0.0.0:8090 start host "$HOST_ID"
+```
+
+9) Approve the Certificate Signing Request (CSR) for the new node.
+```bash
+oc get csr
+
+oc get csr -o name | xargs oc adm certificate approve
+```
+Double check after a while that no further CSR are waiting approval.
+
+10) Check whether we are ready
+```bash
+oc get node
+```
+
+#### DPU Operator
+
+1) deploy operator
+
+2) create DpuOperatorConfig
+
+3) label host and DPU side with `dpu=true`
