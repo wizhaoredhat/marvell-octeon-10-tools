@@ -135,3 +135,98 @@ sudo podman run --pull always --rm --replace --privileged --pid host --network h
   `ifconfig` and `dhcpd` programs.
   Run `$ ip addr del 192.168.122.101/32 dev br-ex scope global label vip ; ip addr add 192.168.122.101/32 dev br-ex scope global`
   and retry.
+
+### Add Marvell DPU as Openshift Node running Red Hat CoreOS
+
+#### Preparation
+
+1) Potential problem: The Red Hat CI clusters are usually configured for a two-cluster setup. In
+this case, the DPU's secondary interface (`enP2p2s0`) is connected to an
+interface on the provisioning host (usually `eno12409`). There we have address
+172.16.3.1/24 and a dhcpd service running.  This provides the DPU with an
+address. Also, we tend to configure NAT, so the DPU can actually reach
+192.168.122.1 (where AssistedInstaller is listening). However, the DPU cannot
+reach 192.168.122.99. We may want to connect the DPU's secondary interface to
+the same network as the Openshift cluster. For example:
+```
+# On provisioning host:
+ip addr del 172.16.3.1/24 dev eno12409
+ip link set eno12409 master virbr0
+systemctl restart dhcpd
+
+# Reactivate profile on DPU (or boot RHCOS ISO afterwards).
+# Note that we got a suitable 192.168.122.0/24 address to
+# directly reach the OCP cluster.
+```
+
+2) Potential problem: the MAC address on the DPU may be random. That causes problems
+because RHCOS wants to boot with `ip=$MAC:dhcp` on the command line. If the MAC address
+is wrong, it cannot boot. Workaround: enter the grub menu and edit to `ip:dhcp`. Proper
+solution: make the MAC address permanent.
+
+##### Add Node
+
+1) Assume we have Assisted Installer running and the cluster already created. Find the cluster ID with
+```
+aicli -u 0.0.0.0:8090 list clusters
+
+AI_URL="http://127.0.0.1:8090"
+CLUSTER_ID=$(curl -s -X GET "$AI_URL/api/assisted-install/v2/clusters?with_hosts=true" -H "accept: application/json" -H "get_unregistered_clusters: false"| jq -r '.[].id')
+echo "$CLUSTER_ID"
+````
+
+2) Get the download URL for the discovery ISO via
+```
+curl -X POST "$AI_URL/api/assisted-install/v2/infra-envs" -H "Content-Type: application/json" -d '{
+    "name": "arm64-infra-env",
+    "cluster_id": "'"$CLUSTER_ID"'",
+    "cpu_architecture": "arm64",
+    "pull_secret": "'$(cat ~/pull_secret.json | sed 's/"/\\"/g')'"
+  }'
+```
+and the output `"id":"..."` and `"download_url":"http://192.168.122.1:8888/byid/.../4.19/arm64/full.iso"`.
+
+3) Run pxeboot command on Marvell Host like
+```
+IMAGE=quay.io/sdaniele/marvell-tools:latest
+podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" \
+    ./pxeboot.py "$DOWNLOAD_URL"
+```
+
+4) Wait, then you should see the new host in
+```
+aicli -u 0.0.0.0:8090 list hosts
+```
+
+5) Check status via
+```
+aicli -u 0.0.0.0:8090 info host "$HOST_ID"
+```
+Look out for problems. In particular connectivity problems. The DPU must reach
+the Assisted Installer IP address and also the OCP clusters network (in our
+setups usually 192.168.122.0/24). Check preparation steps above.
+
+6) Start installation of host
+```
+aicli -u 0.0.0.0:8090 start host "$HOST_ID"
+```
+
+7) Approve the Certificate Signing Request (CSR) for the new node.
+```
+oc get csr
+
+oc get csr -o name | xargs oc adm certificate approve
+```
+
+8) Check whether we are ready
+```
+oc get node
+```
+
+#### DPU Operator
+
+1) deploy operator
+
+2) create DpuOperatorConfig
+
+3) label host and DPU side with `dpu=true`
