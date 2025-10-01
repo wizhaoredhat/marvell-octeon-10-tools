@@ -1,0 +1,12 @@
+set timeout=10
+
+menuentry 'Install' {
+    linux pxelinux/vmlinuz \
+        ip=dhcp \
+        rd.neednet=1 \
+        coreos.live.rootfs_url=http://172.131.100.1:24380/marvell_dpu_iso/images/pxeboot/rootfs.img \
+        ignition.firstboot \
+        ignition.platform.id=metal \
+        ignition.config.url=http://172.131.100.1:24380/ign/config.ign
+    initrd pxelinux/initrd.img
+}

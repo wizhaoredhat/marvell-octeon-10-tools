@@ -2,6 +2,7 @@ import logging
 import os
 import shlex
 import shutil
+import typing
 
 from collections.abc import Iterable
 from typing import Callable
@@ -57,12 +58,24 @@ def check_services_running() -> None:
         )
 
 
-def run_dhcpd() -> None:
+def run_dhcpd(*, pxe_line: Optional[str] = None) -> None:
     logger.info("Configuring DHCP")
 
     shutil.copy(
         packaged_file("manifests/pxeboot/dhcpd.conf"),
         "/etc/dhcp/dhcpd.conf",
+    )
+
+    if not pxe_line:
+        pxe_line = "# no pxe options"
+
+    host.local.run(
+        [
+            "sed",
+            "-i",
+            f"s/#__PXE_LINE__/{common.sed_escape_repl(pxe_line)}/",
+            "/etc/dhcp/dhcpd.conf",
+        ]
     )
 
     host.local.run("killall dhcpd")
@@ -191,7 +204,7 @@ def mount_iso(
     os.makedirs(mount_path, exist_ok=True)
     host.local.run(["umount", mount_path])
     ret = host.local.run(
-        ["mount", "-t", "iso9660", "-o", "loop", iso_path, mount_path],
+        ["mount", "-o", "loop", iso_path, mount_path],
         log_level_fail=logging.WARN,
     )
     return ret.success
@@ -261,6 +274,35 @@ def create_iso_file(
 
     logger.info(f"use iso {shlex.quote(iso2)}")
     return iso2, iso_url, cached_http_file
+
+
+def ignition_storage_file(
+    *,
+    path: str,
+    contents: str,
+    mode: int = 0o644,
+    user: str = "root",
+    group: str = "root",
+    overwrite: bool = True,
+    encode: typing.Literal["plain", "base64"] = "base64",
+) -> dict[str, typing.Any]:
+    if encode == "plain":
+        ct = f"data:,{contents}"
+    elif encode == "base64":
+        ct = common.base64_encode(
+            contents,
+            prefix="data:;base64,",
+        )
+    else:
+        raise ValueError("encode")
+    return {
+        "path": path,
+        "mode": mode,
+        "user": {"name": user},
+        "group": {"name": group},
+        "overwrite": overwrite,
+        "contents": {"source": ct},
+    }
 
 
 def run_main(main_fcn: Callable[[], None]) -> None:
