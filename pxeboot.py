@@ -229,11 +229,10 @@ def select_pxe_entry(console_wait: float = 60.0) -> None:
         logger.info(f"Trying up to {retry} times to find pxe boot interface")
         while retry:
             ser.send(KEY_DOWN)
-            time.sleep(0.1)
             try:
                 # TODO: FIXME: We need to read the port configuration.
                 # e.g. 80AA99887766 + number of lanes used in the SERDES
-                ser.expect("UEFI PXEv4.*MAC:80AA99887767", 1)
+                ser.expect("UEFI PXEv4.*MAC:80AA99887767", 0.5)
                 break
             except Exception:
                 retry -= 1
