@@ -321,6 +321,17 @@ def parse_args() -> RunContext:
         prompt=args.prompt,
     )
 
+    if not common_dpu.check_files(
+        (
+            "tmp",
+            "usr/bin",
+        ),
+        cwd=cfg.host_path,
+    ):
+        parser.error(
+            f"The host_path {cfg.host_path} seems not valid. Use `podman run -v /:/host ...`?"
+        )
+
     ctx = RunContext(cfg=cfg)
 
     return ctx
