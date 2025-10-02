@@ -151,7 +151,7 @@ def ssh_generate_key(chroot_path: str, *, create: bool = True) -> Optional[str]:
             logger.info(f"ssh-generate-key: skip creating key {repr(file)} on host")
             return None
         try:
-            os.mkdir(os.path.dirname(file))
+            os.mkdir(os.path.dirname(file), mode=0o700)
         except FileExistsError:
             pass
         host.local.run(
