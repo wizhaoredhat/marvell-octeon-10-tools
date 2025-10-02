@@ -636,6 +636,48 @@ def ssh_get_ipaddrs(ctx: RunContext, *, host_ip: str) -> Optional[list[str]]:
     return sorted(host_ips)
 
 
+def check_ip_is_ready(ctx: RunContext, ips: list[str]) -> tuple[Optional[str], bool]:
+    ip = netdev.wait_ping(*ips)
+    if ip is None:
+        return None, False
+
+    ret = host.local.run(
+        ssh_cmd(ctx, ip, "uptime"),
+        log_level_result=logging.DEBUG,
+    )
+    if not ret:
+        return ip, False
+
+    return ip, True
+
+
+def check_host_is_booted(ctx: RunContext) -> Optional[str]:
+    ips_unique = set(common_dpu.DPU_DHCPRANGE)
+    ips_unique.discard(common_dpu.dpu_ip4addr)
+    ips = [common_dpu.dpu_ip4addr] + sorted(ips_unique)
+
+    while True:
+        ip, is_ready = check_ip_is_ready(ctx, ips)
+
+        if ip is None:
+            # No IP address is ready at all.
+            return None
+
+        if is_ready:
+            # This IP address is ready.
+            if ip != common_dpu.dpu_ip4addr:
+                # Just re-check, whether our static IP addess would also be
+                # ready and prefer that instead.
+                ip2, is_ready2 = check_ip_is_ready(ctx, [common_dpu.dpu_ip4addr])
+                if is_ready2:
+                    return ip2
+            return ip
+
+        # This IP address replied to pings, but is not ready. Retry, but
+        # without this IP.
+        ips.remove(ip)
+
+
 def wait_for_boot(ctx: RunContext, ser: common.Serial) -> str:
     has_ser = True
     time_start = time.monotonic()
@@ -663,14 +705,14 @@ def wait_for_boot(ctx: RunContext, ser: common.Serial) -> str:
         # then we wouldn't easily know whether the installer is still running
         # or installation completed with successful. To find the static IP
         # address quite reliably tells us that the host is up.
-        ip = netdev.wait_ping(common_dpu.dpu_ip4addr)
+        ip = check_host_is_booted(ctx)
         if ip is not None:
             logger.info(f"got response from {ip}")
             return ip
 
         if time.monotonic() > time_start + timeout:
             raise RuntimeError(
-                f"Failed to detect IP {common_dpu.dpu_ip4addr} on Marvell card"
+                f"Failed to detect booted Marvell DPU on {common_dpu.dpu_ip4addr} or DHCP range"
             )
 
         if has_ser:

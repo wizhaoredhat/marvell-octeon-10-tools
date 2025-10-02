@@ -20,6 +20,9 @@ dpu_ip4addrnet = f"{dpu_ip4addr}/24"
 host_ip4addr = "172.131.100.1"
 host_ip4addrnet = f"{host_ip4addr}/24"
 
+# The subnet range from "manifests/pxeboot/dhcpd.conf"
+DPU_DHCPRANGE = tuple(f"172.131.100.{i}" for i in range(10, 20 + 1))
+
 ESC = "\x1b"
 KEY_DOWN = "\x1b[B"
 KEY_ENTER = "\r\n"
