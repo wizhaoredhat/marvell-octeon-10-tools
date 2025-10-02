@@ -144,8 +144,14 @@ def nft_masquerade(ifname: str, subnet: str) -> None:
     )
 
 
-def ssh_generate_key(chroot_path: str, *, create: bool = True) -> Optional[str]:
-    file = f"{chroot_path}/root/.ssh/id_ed25519"
+def ssh_generate_key(
+    *,
+    file: str,
+    create: bool = True,
+    comment: str = "pxeboot@marvel-tools.local",
+) -> Optional[str]:
+    assert file
+    assert not file.endswith(".pub")
     if not os.path.exists(file) or not os.path.exists(f"{file}.pub"):
         if not create:
             logger.info(f"ssh-generate-key: skip creating key {repr(file)} on host")
@@ -155,7 +161,17 @@ def ssh_generate_key(chroot_path: str, *, create: bool = True) -> Optional[str]:
         except FileExistsError:
             pass
         host.local.run(
-            f'ssh-keygen -t ed25519 -C marvell-tools@local.local -N "" -f {shlex.quote(file)}',
+            [
+                "ssh-keygen",
+                "-t",
+                "ed25519",
+                "-C",
+                comment,
+                "-N",
+                "",
+                "-f",
+                file,
+            ],
             die_on_error=True,
         )
         logger.info(f"ssh-generate-key: SSH key {repr(file)} created")
@@ -305,8 +321,14 @@ def ignition_storage_file(
     }
 
 
-def run_main(main_fcn: Callable[[], None]) -> None:
-    common.run_main(
-        main_fcn,
-        cleanup=common.thread_list_join_all,
-    )
+def run_main(
+    main_fcn: Callable[[], None],
+    *,
+    extra_cleanup: Optional[Callable[[], None]] = None,
+) -> None:
+    def _cleanup() -> None:
+        common.thread_list_join_all()
+        if extra_cleanup is not None:
+            extra_cleanup()
+
+    common.run_main(main_fcn, cleanup=_cleanup)

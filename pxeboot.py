@@ -92,6 +92,38 @@ class RunContext(common.ImmutableDataclass):
     def ssh_keys(self) -> tuple[str, ...]:
         return self._field_get("ssh_keys", tuple)
 
+    def ssh_privkey_file_set_once(self, ssh_privkey_file: str) -> None:
+        self._field_set_once("ssh_privkey_file", [ssh_privkey_file, True])
+
+    @property
+    def ssh_privkey_file(self) -> str:
+        ssh_privkey_file: str
+        has: bool
+        val = self._field_get("ssh_privkey_file", list)
+        with self._lock:
+            ssh_privkey_file, has = val
+        if not has:
+            raise RuntimeError("The private key was already deleted")
+        return ssh_privkey_file
+
+    def ssh_privkey_file_cleanup(self) -> None:
+        ssh_privkey_file: str
+        has: bool
+        val = self._field_get(
+            "ssh_privkey_file",
+            list,
+            on_missing=lambda: ["", False],
+        )
+        with self._lock:
+            ssh_privkey_file, has = val
+            if not has:
+                return
+            val[1] = False
+        try:
+            os.remove(ssh_privkey_file)
+        except Exception:
+            pass
+
     def iso_kind_set_once(self, iso_kind: "IsoKind") -> None:
         self._field_set_once("iso_kind", iso_kind)
 
@@ -780,7 +812,7 @@ def setup_tftp(ctx: RunContext) -> None:
     ctx.iso_kind.setup_tftp_files()
 
 
-def prepare_host(ctx: RunContext) -> list[str]:
+def prepare_host(ctx: RunContext) -> tuple[list[str], str]:
     if ctx.host_mode in ("rhel", "coreos"):
         common_dpu.nmcli_setup_mngtiface(
             ifname=ctx.cfg.dev,
@@ -797,6 +829,15 @@ def prepare_host(ctx: RunContext) -> list[str]:
 
     ssh_keys = []
 
+    ssh_privkey_file = common.unwrap(
+        common_dpu.ssh_generate_key(
+            file="/tmp/marvell-tools/id_ed25519",
+            create=True,
+            comment="pxeboot-internal@marvel-tools.local",
+        )
+    )
+    ssh_keys.append(common_dpu.ssh_read_pubkey(ssh_privkey_file))
+
     add_host_key = True
     if ctx.cfg.cfg_ssh_keys:
         add_host_key = False
@@ -807,13 +848,14 @@ def prepare_host(ctx: RunContext) -> list[str]:
                 ssh_keys.append(s)
 
     if add_host_key:
-        ssh_privkey_file = common_dpu.ssh_generate_key(
-            ctx.cfg.host_path,
-            create=True,
+        privkey_file = common.unwrap(
+            common_dpu.ssh_generate_key(
+                file=f"{ctx.cfg.host_path}/root/.ssh/id_ed25519",
+                create=True,
+            )
         )
-        if ssh_privkey_file is not None:
-            logger.info(f"prepare-host: add host key {repr(ssh_privkey_file)}")
-            ssh_keys.append(common_dpu.ssh_read_pubkey(ssh_privkey_file))
+        logger.info(f"prepare-host: add host key {repr(privkey_file)}")
+        ssh_keys.append(common_dpu.ssh_read_pubkey(privkey_file))
 
     if not ssh_keys:
         logger.info("prepare-host: no SSH keys")
@@ -821,7 +863,7 @@ def prepare_host(ctx: RunContext) -> list[str]:
         for k in ssh_keys:
             logger.info(f"prepare-host: use SSH key {repr(k)}")
 
-    return ssh_keys
+    return ssh_keys, ssh_privkey_file
 
 
 def setup_dhcp(ctx: RunContext) -> None:
@@ -886,10 +928,21 @@ def dpu_pxeboot(ctx: RunContext) -> None:
         wait_for_boot(ctx, ser)
 
 
+_global_ctx: Optional[RunContext] = None
+
+
+def main_cleanup() -> None:
+    if _global_ctx is not None:
+        _global_ctx.ssh_privkey_file_cleanup()
+
+
 def main() -> None:
     signal.signal(signal.SIGUSR1, _signal_handler)
 
     ctx = parse_args()
+
+    global _global_ctx
+    _global_ctx = ctx
 
     logger.info(f"pxeboot: {shlex.join(shlex.quote(s) for s in sys.argv)}")
     logger.info(f"pxeboot run context: {ctx}")
@@ -897,9 +950,10 @@ def main() -> None:
     ctx.host_mode_set_once()
 
     logger.info("Preparing services for Pxeboot")
-    ssh_keys = prepare_host(ctx)
+    ssh_keys, ssh_privkey_file = prepare_host(ctx)
 
     ctx.ssh_keys_set_once(ssh_keys)
+    ctx.ssh_privkey_file_set_once(ssh_privkey_file)
 
     if not ctx.cfg.host_setup_only:
         iso_kind = create_and_mount_iso(ctx)
@@ -944,4 +998,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    common_dpu.run_main(main)
+    common_dpu.run_main(
+        main,
+        extra_cleanup=main_cleanup,
+    )
