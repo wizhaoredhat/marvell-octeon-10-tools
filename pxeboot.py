@@ -11,6 +11,7 @@ import logging
 import os
 import shlex
 import shutil
+import signal
 import sys
 import time
 import typing
@@ -35,6 +36,14 @@ MNT_PATH = "/mnt/marvell_dpu_iso"
 WWW_PATH = "/www"
 
 
+_signal_sigusr1_received = False
+
+
+def _signal_handler(signum: int, frame: typing.Any) -> None:
+    global _signal_sigusr1_received
+    _signal_sigusr1_received = True
+
+
 @dataclasses.dataclass(frozen=True, **common.KW_ONLY_DATACLASS)
 class Config:
     dpu_name: str = ""
@@ -52,7 +61,7 @@ class Config:
     nm_secondary_ip_gateway: str = ""
     extra_packages: tuple[str, ...] = ()
     default_extra_packages: bool = False
-    console_wait: float = 60.0
+    console_wait: float = 0.0
     prompt: bool = False
 
     def __post_init__(self) -> None:
@@ -468,7 +477,7 @@ def parse_args() -> RunContext:
         "--console-wait",
         type=float,
         default=Config.console_wait,
-        help='After installation is started, the tool will stay connected to the serial port for the specified amount of time. The benefit is that we see what happens in the output of the tool. The downside is that we cannot attach a second terminal to the serial port during that time. Defaults to 60 seconds. The console output is also written to "{host-path}/tmp/pxeboot-serial.*.log".',
+        help='After installation is started, the tool will stay connected to the serial port for the specified amount of time. The benefit is that we see what happens in the output of the tool. The downside is that we cannot attach a second terminal to the serial port during that time. Defaults to 0 which means to stay connected until the program ends. You can force a close of the serial port by sending SIGUSR1 to the process. The console output is also written to "{host-path}/tmp/pxeboot-serial.*.log".',
     )
     parser.add_argument(
         "--nm-secondary-cloned-mac-address",
@@ -578,7 +587,13 @@ def wait_for_boot(ctx: RunContext, ser: common.Serial) -> None:
     sleep_time = 60
     while True:
 
-        if has_ser and time.monotonic() > time_start + ctx.cfg.console_wait:
+        if has_ser and (
+            _signal_sigusr1_received
+            or (
+                ctx.cfg.console_wait > 0
+                and time.monotonic() > time_start + ctx.cfg.console_wait
+            )
+        ):
             logger.info(f"Closing serial console {ser.port}")
             has_ser = False
 
@@ -603,7 +618,11 @@ def wait_for_boot(ctx: RunContext, ser: common.Serial) -> None:
         if has_ser:
             # Read and log the output for a bit longer. This way, we see how the
             # DPU starts installation.
-            ser.expect(pattern=None, timeout=sleep_time)
+            sleep_end_time = time.monotonic() + sleep_time
+            while (
+                (now := time.monotonic()) < sleep_end_time
+            ) and not _signal_sigusr1_received:
+                ser.expect(pattern=None, timeout=min(2.0, sleep_end_time - now))
         else:
             time.sleep(sleep_time)
 
@@ -868,6 +887,8 @@ def dpu_pxeboot(ctx: RunContext) -> None:
 
 
 def main() -> None:
+    signal.signal(signal.SIGUSR1, _signal_handler)
+
     ctx = parse_args()
 
     logger.info(f"pxeboot: {shlex.join(shlex.quote(s) for s in sys.argv)}")
