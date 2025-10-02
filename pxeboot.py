@@ -250,7 +250,7 @@ def parse_args() -> RunContext:
         "--console-wait",
         type=float,
         default=Config.console_wait,
-        help='After installation is started, the tool will stay connected to the serial port for the specified amount of time. The benefit is that we see what happens in the output of the tool. The downside is that we cannot attach a second terminal to the serial port during that time. Defaults to 60 seconds. The console output is also written to "/tmp/pxeboot-serial.*.log".',
+        help='After installation is started, the tool will stay connected to the serial port for the specified amount of time. The benefit is that we see what happens in the output of the tool. The downside is that we cannot attach a second terminal to the serial port during that time. Defaults to 60 seconds. The console output is also written to "{host-path}/tmp/pxeboot-serial.*.log".',
     )
     parser.add_argument(
         "--nm-secondary-cloned-mac-address",
@@ -380,12 +380,10 @@ def wait_for_boot(ctx: RunContext, ser: common.Serial) -> None:
         sleep_time = max(int(sleep_time / 1.3), 9)
 
 
-def create_serial() -> common.Serial:
-    # We also write the data from the serial port to "/tmp/pxeboot-serial-*.log"
+def create_serial(ctx: RunContext) -> common.Serial:
+    # We also write the data from the serial port to "{host_path}/tmp/pxeboot-serial-*.log"
     # on the host. For debugging, you can find what was written there.
-    log_stream_filename = (
-        f"/tmp/pxeboot-serial.{datetime.datetime.now():%Y%m%d-%H%M%S.%f}.log"
-    )
+    log_stream_filename = f"{ctx.cfg.host_path}/tmp/pxeboot-serial.{datetime.datetime.now():%Y%m%d-%H%M%S.%f}.log"
 
     logger.info(
         f"Select entry and boot in {common_dpu.TTYUSB0} (log to {log_stream_filename})"
@@ -634,7 +632,7 @@ def create_and_mount_iso(ctx: RunContext) -> IsoKind:
 def dpu_pxeboot(ctx: RunContext) -> None:
     logger.info("Resetting card")
     reset()
-    with create_serial() as ser:
+    with create_serial(ctx) as ser:
         select_pxe_entry(ctx, ser)
         wait_for_boot(ctx, ser)
 
