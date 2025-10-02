@@ -611,7 +611,32 @@ def detect_host_mode(*, host_path: str) -> str:
     return "coreos"
 
 
-def wait_for_boot(ctx: RunContext, ser: common.Serial) -> None:
+def ssh_cmd(ctx: RunContext, host_ip: str, *args: str) -> list[str]:
+    return [
+        "ssh",
+        "-i",
+        ctx.ssh_privkey_file,
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "-o",
+        "LogLevel=QUIET",
+        f"{ctx.iso_kind.SSH_USER}@{host_ip}",
+        *args,
+    ]
+
+
+def ssh_get_ipaddrs(ctx: RunContext, *, host_ip: str) -> Optional[list[str]]:
+    ret = host.local.run(ssh_cmd(ctx, host_ip, "hostname", "-I"))
+    if not ret:
+        return []
+    host_ips = set(ret.out.split())
+    host_ips.discard(host_ip)
+    return sorted(host_ips)
+
+
+def wait_for_boot(ctx: RunContext, ser: common.Serial) -> str:
     has_ser = True
     time_start = time.monotonic()
     timeout = max(ctx.cfg.console_wait + 100.0, 1800.0)
@@ -638,9 +663,10 @@ def wait_for_boot(ctx: RunContext, ser: common.Serial) -> None:
         # then we wouldn't easily know whether the installer is still running
         # or installation completed with successful. To find the static IP
         # address quite reliably tells us that the host is up.
-        if netdev.wait_ping(common_dpu.dpu_ip4addr) is not None:
-            logger.info(f"got response from {common_dpu.dpu_ip4addr}")
-            break
+        ip = netdev.wait_ping(common_dpu.dpu_ip4addr)
+        if ip is not None:
+            logger.info(f"got response from {ip}")
+            return ip
 
         if time.monotonic() > time_start + timeout:
             raise RuntimeError(
@@ -920,12 +946,12 @@ def create_and_mount_iso(ctx: RunContext) -> IsoKind:
         logger.warning(f"ISO {iso_path} seems broken. Try re-downloading {iso2}")
 
 
-def dpu_pxeboot(ctx: RunContext) -> None:
+def dpu_pxeboot(ctx: RunContext) -> str:
     logger.info("Resetting card")
     reset()
     with create_serial(ctx) as ser:
         select_pxe_entry(ctx, ser)
-        wait_for_boot(ctx, ser)
+        return wait_for_boot(ctx, ser)
 
 
 _global_ctx: Optional[RunContext] = None
@@ -974,7 +1000,7 @@ def main() -> None:
         for try_count in itertools.count(start=1):
             logger.info(f"Starting UEFI PXE Boot (try {try_count})")
             try:
-                dpu_pxeboot(ctx)
+                host_ip = dpu_pxeboot(ctx)
             except Exception as e:
                 if try_count >= 3:
                     raise RuntimeError(f"Failure to pxeboot: {e}") from e
@@ -987,13 +1013,18 @@ def main() -> None:
     logger.info("Terminating http, tftp, and dhcpd")
     common.thread_list_join_all()
 
+    host_setup_only_msg = ""
+    host_ips_msg = ""
+
     if ctx.cfg.host_setup_only:
         host_setup_only_msg = " (host-setup-only)"
     else:
-        host_setup_only_msg = ""
+        other_host_ips = ssh_get_ipaddrs(ctx, host_ip=host_ip)
+        if other_host_ips:
+            host_ips_msg = f" (or on {list(other_host_ips)}"
 
     logger.info(
-        f"SUCCESS{host_setup_only_msg}. Try `ssh {ctx.iso_kind.SSH_USER}@{common_dpu.dpu_ip4addr}`"
+        f"SUCCESS{host_setup_only_msg}. Try `ssh {ctx.iso_kind.SSH_USER}@{host_ip}`{host_ips_msg}"
     )
 
 
