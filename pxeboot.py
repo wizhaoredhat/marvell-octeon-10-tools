@@ -649,8 +649,9 @@ def dpu_pxeboot(ctx: RunContext) -> None:
 
 
 def main() -> None:
-    logger.info(f"pxeboot: {shlex.join(shlex.quote(s) for s in sys.argv)}")
     ctx = parse_args()
+
+    logger.info(f"pxeboot: {shlex.join(shlex.quote(s) for s in sys.argv)}")
     logger.info(f"pxeboot run context: {ctx}")
 
     ctx.host_mode_set_once()
