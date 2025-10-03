@@ -267,7 +267,15 @@ def create_iso_file(
     # Is iso1 a HTTP/HTTPS URL? In that case, download the file to disk.
     # Assign the result in path to "iso2".
     if iso1.startswith("http://") or iso1.startswith("https://"):
+        import hashlib
+
         filename = iso1[(iso1.rfind("/") + 1) :]
+
+        filename_name, filename_ext = os.path.splitext(filename)
+        filename_digest = hashlib.sha256(iso1.encode()).hexdigest()[:8]
+
+        filename = f"{filename_name}.{filename_digest}{filename_ext}"
+
         iso2 = os.path.join(chroot_path, f"root/rhel-iso-{filename}")
         if force or not os.path.exists(iso2):
             iso2_tmp = f"{iso2}.tmp"
