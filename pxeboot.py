@@ -38,6 +38,7 @@ WWW_PATH = "/www"
 class Config:
     dpu_name: str = "marvell-dpu"
     iso: str = "rhel:"
+    cfg_iso_kind: str = "auto"
     host_path: str = "/host"
     cfg_host_mode: str = "auto"
     dev: str = "eno4"
@@ -92,15 +93,25 @@ class RunContext(common.ImmutableDataclass):
 
 @dataclasses.dataclass(frozen=True)
 class IsoKind(abc.ABC):
+    NAME: typing.ClassVar[str]
     CHECK_FILES: typing.ClassVar[tuple[str, ...]]
 
     @staticmethod
     def detect_from_iso(
         *,
+        cfg_iso_kind: Optional[str] = None,
         read_check: bool = False,
     ) -> Optional["IsoKind"]:
+        if cfg_iso_kind:
+            cfg_iso_kind = cfg_iso_kind.strip().lower()
         for iso_kind_type in (IsoKindRhel,):
             iso_kind = iso_kind_type()
+            if (
+                cfg_iso_kind
+                and cfg_iso_kind != "auto"
+                and iso_kind.NAME != cfg_iso_kind
+            ):
+                continue
             if common_dpu.check_files(
                 iso_kind.CHECK_FILES,
                 cwd=MNT_PATH,
@@ -109,8 +120,12 @@ class IsoKind(abc.ABC):
                 return iso_kind
         return None
 
+    def __str__(self) -> str:
+        return self.NAME
+
 
 class IsoKindRhel(IsoKind):
+    NAME = "rhel"
     CHECK_FILES = (
         "EFI/BOOT/grubaa64.efi",
         "images/pxeboot/initrd.img",
@@ -217,6 +232,12 @@ def parse_args() -> RunContext:
         help="Optional argument where the host filesystem is mounted. Default is '/host'. Run podman with \"-v /:/host\".",
     )
     parser.add_argument(
+        "--iso-kind",
+        choices=["auto", "rhel", "rhcos"],
+        default=Config.cfg_iso_kind,
+        help='Specify the ISO kind. This can be either "rhel", "rhcos" or "auto" (the default). Only with "rhel" we generate a kickstart. The meaning of other options may differ depending on the ISO kind or they may be ignored altogether.',
+    )
+    parser.add_argument(
         "--ssh-key",
         action="append",
         help='Specify SSH public keys to add to the DPU\'s /root/.ssh/authorized_keys. Can be specified multiple times. If unspecified or set to "", include "/{host-path}/root/.ssh/id_ed25519.pub" (this file will be generated with "--host-mode=rhel" if it doesn\'t exist).',
@@ -305,6 +326,7 @@ def parse_args() -> RunContext:
     cfg = Config(
         dpu_name=args.dpu_name,
         iso=args.iso,
+        cfg_iso_kind=args.iso_kind,
         host_path=args.host_path,
         cfg_host_mode=args.host_mode,
         dev=args.dev,
@@ -617,13 +639,19 @@ def create_and_mount_iso(ctx: RunContext) -> IsoKind:
             mount_path=MNT_PATH,
         )
         if success:
-            iso_kind = IsoKind.detect_from_iso(read_check=True)
+            iso_kind = IsoKind.detect_from_iso(
+                cfg_iso_kind=ctx.cfg.cfg_iso_kind,
+                read_check=True,
+            )
             if iso_kind is not None:
                 logger.info(
                     f"ISO {iso_path} successfully mounted at {MNT_PATH} (as {iso_kind})"
                 )
                 return iso_kind
             host.local.run(["umount", MNT_PATH])
+            logger.warning(
+                f"ISO {iso_path} does not look like and ISO kind {ctx.cfg.cfg_iso_kind!r}"
+            )
 
         if is_retry or not cached_http_file:
             # On first try, if the ISO was found on disk (and the path was a
