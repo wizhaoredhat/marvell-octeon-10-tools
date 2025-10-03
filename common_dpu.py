@@ -20,6 +20,9 @@ dpu_ip4addrnet = f"{dpu_ip4addr}/24"
 host_ip4addr = "172.131.100.1"
 host_ip4addrnet = f"{host_ip4addr}/24"
 
+# The subnet range from "manifests/pxeboot/dhcpd.conf"
+DPU_DHCPRANGE = tuple(f"172.131.100.{i}" for i in range(10, 20 + 1))
+
 ESC = "\x1b"
 KEY_DOWN = "\x1b[B"
 KEY_ENTER = "\r\n"
@@ -144,18 +147,34 @@ def nft_masquerade(ifname: str, subnet: str) -> None:
     )
 
 
-def ssh_generate_key(chroot_path: str, *, create: bool = True) -> Optional[str]:
-    file = f"{chroot_path}/root/.ssh/id_ed25519"
+def ssh_generate_key(
+    *,
+    file: str,
+    create: bool = True,
+    comment: str = "pxeboot@marvel-tools.local",
+) -> Optional[str]:
+    assert file
+    assert not file.endswith(".pub")
     if not os.path.exists(file) or not os.path.exists(f"{file}.pub"):
         if not create:
             logger.info(f"ssh-generate-key: skip creating key {repr(file)} on host")
             return None
         try:
-            os.mkdir(os.path.dirname(file))
+            os.mkdir(os.path.dirname(file), mode=0o700)
         except FileExistsError:
             pass
         host.local.run(
-            f'ssh-keygen -t ed25519 -C marvell-tools@local.local -N "" -f {shlex.quote(file)}',
+            [
+                "ssh-keygen",
+                "-t",
+                "ed25519",
+                "-C",
+                comment,
+                "-N",
+                "",
+                "-f",
+                file,
+            ],
             die_on_error=True,
         )
         logger.info(f"ssh-generate-key: SSH key {repr(file)} created")
@@ -229,7 +248,7 @@ def create_iso_file(
         if rhel_version == "":
             # This is the default.
             rhel_version = DEFAULT_RHEL_ISO
-        url = f"https://download.eng.bos.redhat.com/rhel-9/nightly/RHEL-9/latest-RHEL-{rhel_version}.0/compose/BaseOS/aarch64/iso/"
+        url = f"https://download.eng.brq.redhat.com/rhel-9/nightly/RHEL-9/latest-RHEL-{rhel_version}/compose/BaseOS/aarch64/iso/"
         res = host.local.run(
             f'curl -L -k -s {shlex.quote(url)} | sed -n \'s/.*href="\\(RHEL-[^"]\\+-dvd1.iso\\)".*/\\1/p\' | head -n1',
             log_level_fail=logging.ERROR,
@@ -305,8 +324,14 @@ def ignition_storage_file(
     }
 
 
-def run_main(main_fcn: Callable[[], None]) -> None:
-    common.run_main(
-        main_fcn,
-        cleanup=common.thread_list_join_all,
-    )
+def run_main(
+    main_fcn: Callable[[], None],
+    *,
+    extra_cleanup: Optional[Callable[[], None]] = None,
+) -> None:
+    def _cleanup() -> None:
+        common.thread_list_join_all()
+        if extra_cleanup is not None:
+            extra_cleanup()
+
+    common.run_main(main_fcn, cleanup=_cleanup)
