@@ -180,14 +180,8 @@ EXTRA_PACKAGES=( @__EXTRA_PACKAGES__@ )
 if [ "@__DEFAULT_EXTRA_PACKAGES__@" = 1 ] ; then
     case "$(sed -n 's/^VERSION_ID="\(.*\)"/\1/p' /etc/os-release)" in
         9.6)
-            # Install a kernel from RHEL-90248 to verify the patch.
             EXTRA_PACKAGES+=(
-                # From file.corp.redhat.com
-                "http://10.30.20.93/~thaller//marvell-octeon-10-tools/kernel-5.14.0-611.9.7_octeon.el9/aarch64/kernel-5.14.0-611.9.7_octeon.el9_7.aarch64.rpm"
-                "http://10.30.20.93/~thaller//marvell-octeon-10-tools/kernel-5.14.0-611.9.7_octeon.el9/aarch64/kernel-core-5.14.0-611.9.7_octeon.el9_7.aarch64.rpm"
-                "http://10.30.20.93/~thaller//marvell-octeon-10-tools/kernel-5.14.0-611.9.7_octeon.el9/aarch64/kernel-modules-5.14.0-611.9.7_octeon.el9_7.aarch64.rpm"
-                "http://10.30.20.93/~thaller//marvell-octeon-10-tools/kernel-5.14.0-611.9.7_octeon.el9/aarch64/kernel-modules-core-5.14.0-611.9.7_octeon.el9_7.aarch64.rpm"
-                "http://10.30.20.93/~thaller//marvell-octeon-10-tools/kernel-5.14.0-611.9.7_octeon.el9/aarch64/kernel-modules-extra-5.14.0-611.9.7_octeon.el9_7.aarch64.rpm"
+                # Nothing for now.
             )
             ;;
         *)
