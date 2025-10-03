@@ -1,0 +1,2 @@
+alias l='ls $LS_OPTIONS -lAc'
+alias ll='ls $LS_OPTIONS -l'

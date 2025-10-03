@@ -51,11 +51,13 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
     dnf upgrade -y --skip-broken --allowerasing && \
     dnf install \
         /usr/bin/ssh-keygen \
+        cpio \
         dhcp-server \
         ethtool \
         git-core \
         iproute \
         iputils \
+        jq \
         libconfig \
         minicom \
         nftables \
@@ -86,7 +88,10 @@ COPY ./*.py ./*sh ./mypy.ini /marvell-octeon-10-tools/
 COPY ./manifests /marvell-octeon-10-tools/manifests
 
 COPY manifests/.minirc.dfl /root/
+COPY manifests/.bashrc.mine /root/
 COPY manifests/Minicom /usr/bin/
+
+RUN printf "\nsource ~/.bashrc.mine\n" >> /root/.bashrc
 
 COPY manifests/ssh-trust-dpu /usr/bin/
 COPY manifests/host-setup /usr/bin/

@@ -2,6 +2,7 @@ import logging
 import os
 import shlex
 import shutil
+import typing
 
 from collections.abc import Iterable
 from typing import Callable
@@ -57,12 +58,24 @@ def check_services_running() -> None:
         )
 
 
-def run_dhcpd() -> None:
+def run_dhcpd(*, pxe_line: Optional[str] = None) -> None:
     logger.info("Configuring DHCP")
 
     shutil.copy(
         packaged_file("manifests/pxeboot/dhcpd.conf"),
         "/etc/dhcp/dhcpd.conf",
+    )
+
+    if not pxe_line:
+        pxe_line = "# no pxe options"
+
+    host.local.run(
+        [
+            "sed",
+            "-i",
+            f"s/#__PXE_LINE__/{common.sed_escape_repl(pxe_line)}/",
+            "/etc/dhcp/dhcpd.conf",
+        ]
     )
 
     host.local.run("killall dhcpd")
@@ -80,14 +93,6 @@ def run_dhcpd() -> None:
         "dhcpd",
         "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd",
     )
-
-
-def ping(hn: str) -> bool:
-    return host.local.run(
-        f"timeout 1 ping -4 -c 1 {shlex.quote(hn)}",
-        log_level=-1,
-        log_level_result=logging.DEBUG,
-    ).success
 
 
 cwd, basedir = common.path_basedir(__file__)
@@ -173,37 +178,36 @@ def ssh_read_pubkey(ssh_privkey_file: str) -> str:
 DEFAULT_RHEL_ISO = "9.6"
 
 
+def check_files(
+    files: Iterable[str],
+    *,
+    cwd: Optional[str] = None,
+    read_check: bool = False,
+) -> bool:
+    files = common.iter_eval_now(files)
+    files = [common.path_norm(s, cwd=cwd) for s in files]
+
+    if not all(os.path.exists(f) for f in files):
+        return False
+
+    if read_check and not host.local.run(["sha256sum", *files]):
+        return False
+
+    return True
+
+
 def mount_iso(
     iso_path: str,
     *,
     mount_path: str,
-    required: bool = False,
-    check_files: Optional[Iterable[str]] = None,
 ) -> bool:
-    if check_files is not None:
-        check_files = common.iter_eval_now(check_files)
     os.makedirs(mount_path, exist_ok=True)
     host.local.run(["umount", mount_path])
     ret = host.local.run(
-        ["mount", "-t", "iso9660", "-o", "loop", iso_path, mount_path],
-        die_on_error=required,
+        ["mount", "-o", "loop", iso_path, mount_path],
+        log_level_fail=logging.WARN,
     )
-    if not ret:
-        return False
-
-    if check_files:
-        ret = host.local.run(
-            [
-                "sha256sum",
-                *[f"{mount_path}/{s}" for s in check_files],
-            ],
-            die_on_error=required,
-        )
-        if not ret:
-            host.local.run(["umount", mount_path])
-            return False
-
-    return True
+    return ret.success
 
 
 def create_iso_file(
@@ -227,7 +231,7 @@ def create_iso_file(
             rhel_version = DEFAULT_RHEL_ISO
         url = f"https://download.eng.bos.redhat.com/rhel-9/nightly/RHEL-9/latest-RHEL-{rhel_version}.0/compose/BaseOS/aarch64/iso/"
         res = host.local.run(
-            f'curl -k -s {shlex.quote(url)} | sed -n \'s/.*href="\\(RHEL-[^"]\\+-dvd1.iso\\)".*/\\1/p\' | head -n1',
+            f'curl -L -k -s {shlex.quote(url)} | sed -n \'s/.*href="\\(RHEL-[^"]\\+-dvd1.iso\\)".*/\\1/p\' | head -n1',
             log_level_fail=logging.ERROR,
         )
         url_part = res.out.strip()
@@ -247,8 +251,9 @@ def create_iso_file(
         filename = iso1[(iso1.rfind("/") + 1) :]
         iso2 = os.path.join(chroot_path, f"root/rhel-iso-{filename}")
         if force or not os.path.exists(iso2):
+            iso2_tmp = f"{iso2}.tmp"
             ret = host.local.run(
-                f"curl -k -o {shlex.quote(iso2)} {shlex.quote(iso1)}",
+                f"curl -L -k -o {shlex.quote(iso2_tmp)} {shlex.quote(iso1)} && mv {shlex.quote(iso2_tmp)} {shlex.quote(iso2)}",
                 log_level_fail=logging.ERROR,
             )
             if not ret.success:
@@ -269,6 +274,35 @@ def create_iso_file(
 
     logger.info(f"use iso {shlex.quote(iso2)}")
     return iso2, iso_url, cached_http_file
+
+
+def ignition_storage_file(
+    *,
+    path: str,
+    contents: str,
+    mode: int = 0o644,
+    user: str = "root",
+    group: str = "root",
+    overwrite: bool = True,
+    encode: typing.Literal["plain", "base64"] = "base64",
+) -> dict[str, typing.Any]:
+    if encode == "plain":
+        ct = f"data:,{contents}"
+    elif encode == "base64":
+        ct = common.base64_encode(
+            contents,
+            prefix="data:;base64,",
+        )
+    else:
+        raise ValueError("encode")
+    return {
+        "path": path,
+        "mode": mode,
+        "user": {"name": user},
+        "group": {"name": group},
+        "overwrite": overwrite,
+        "contents": {"source": ct},
+    }
 
 
 def run_main(main_fcn: Callable[[], None]) -> None:
