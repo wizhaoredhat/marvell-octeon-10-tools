@@ -782,7 +782,7 @@ def select_pxe_entry(ctx: RunContext, ser: common.Serial) -> None:
         try:
             # TODO: FIXME: We need to read the port configuration.
             # e.g. 80AA99887766 + number of lanes used in the SERDES
-            ser.expect("UEFI PXEv4.*MAC:80AA99887767", 0.5)
+            ser.expect("UEFI PXEv4.*MAC:(80AA99887767|000F......D4)", 0.5)
             break
         except Exception:
             retry -= 1
