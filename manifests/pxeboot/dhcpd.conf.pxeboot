@@ -8,18 +8,25 @@ option architecture-type code 93 = unsigned integer 16;
 allow booting;
 allow bootp;
 
-next-server 172.131.100.1;
 always-broadcast on;
 
+host dpu-host {
+    hardware ethernet @__HARDWARE_ETHERNET__@;
+    fixed-address 172.131.100.100;
+    filename "@__PXE_FILENAME__@";
+    next-server 172.131.100.1;
+}
+
 subnet 172.131.100.0 netmask 255.255.255.0 {
-    range 172.131.100.10 172.131.100.20;
     option broadcast-address 172.131.100.255;
     option routers 172.131.100.1;
     option domain-name-servers 10.11.5.160, 10.2.70.215;
     option domain-search "anl.lab.eng.bos.redhat.com";
     option dhcp-client-identifier = option dhcp-client-identifier;
+
+    deny unknown-clients;
+
     class "pxeclients" {
         match if substring(option vendor-class-identifier, 0, 9) = "PXEClient";
-#__PXE_LINE__
     }
 }

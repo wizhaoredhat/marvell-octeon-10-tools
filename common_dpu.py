@@ -61,22 +61,30 @@ def check_services_running() -> None:
         )
 
 
-def run_dhcpd(*, pxe_line: Optional[str] = None) -> None:
-    logger.info("Configuring DHCP")
+def run_dhcpd(
+    *,
+    dhcpd_conf: str,
+    pxe_filename: Optional[str] = None,
+    hardware_ethernet: Optional[str] = None,
+) -> None:
+    logger.info(f"Configuring DHCP using {dhcpd_conf}")
 
     shutil.copy(
-        packaged_file("manifests/pxeboot/dhcpd.conf"),
+        dhcpd_conf,
         "/etc/dhcp/dhcpd.conf",
     )
 
-    if not pxe_line:
-        pxe_line = "# no pxe options"
+    s_pxe_filename = common.sed_escape_repl(pxe_filename or "")
+    s_hardware_ethernet = common.sed_escape_repl(hardware_ethernet or "")
 
     host.local.run(
         [
             "sed",
             "-i",
-            f"s/#__PXE_LINE__/{common.sed_escape_repl(pxe_line)}/",
+            "-e",
+            f"s/@__PXE_FILENAME__@/{s_pxe_filename}/",
+            "-e",
+            f"s/@__HARDWARE_ETHERNET__@/{s_hardware_ethernet}/",
             "/etc/dhcp/dhcpd.conf",
         ]
     )
@@ -94,7 +102,7 @@ def run_dhcpd(*, pxe_line: Optional[str] = None) -> None:
 
     run_process(
         "dhcpd",
-        "/usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd",
+        "/usr/sbin/dhcpd -d -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd",
     )
 
 
