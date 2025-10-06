@@ -787,9 +787,9 @@ def select_pxe_entry(ctx: RunContext, ser: common.Serial) -> None:
         except Exception:
             retry -= 1
     if not retry:
-        e = Exception("Didn't find boot interface")
-        logger.info(e)
-        raise e
+        msg = "Didn't find boot menu entry for PXE boot in BIOS. Did you configure a MAC addresses on the DPU?"
+        logger.info(msg)
+        raise RuntimeError(msg)
     else:
         logger.info(f"Found boot interface after {30 - retry} tries, sending enter")
         ser.send(KEY_ENTER)
