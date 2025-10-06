@@ -1,7 +1,7 @@
 # marvell-octeon-10-tools
 Marvell Octeon 10 Tools
 
-```
+```bash
 IMAGE=quay.io/sdaniele/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" <cmd>
 ```
@@ -17,7 +17,7 @@ See [pxe_boot_rhel.md](pxe_boot_rhel.md).
 Utilize the serial interface at /dev/ttyUSB1 to trigger a reset of the associated Marvell DPU
 
 Usage:
-```
+```bash
 IMAGE=quay.io/sdaniele/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" \
   ./reset.py
@@ -61,7 +61,7 @@ The tool makes several assumptions.
 
 
 Usage:
-```
+```bash
 IMAGE=quay.io/sdaniele/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" \
   ./pxeboot.py --help
@@ -74,7 +74,7 @@ From the host with the DPU, we call commands like `pxeboot.py` or `fwupdate.py`.
 We usually also want to setup that host in a way that is convenient for accessing the host.
 
 Run
-```
+```bash
 IMAGE=quay.io/sdaniele/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" host-setup
 ```
@@ -86,7 +86,7 @@ This runs `pxeboot.py -H` and installs the ssh-key on the DPU (via `ssh-trust-dp
 Utilize the serial interface at /dev/ttyUSB0 to update the card with the provided firmware
 
 Usage:
-```
+```bash
 IMAGE=quay.io/sdaniele/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" \
   ./fwupdate.py --dev eno4 /host/root/flash-uefi-cn10ka-11.24.02.img
@@ -96,7 +96,7 @@ sudo podman run --pull always --rm --replace --privileged --pid host --network h
 ### Pre-requisites
 - Ensure dhcpd, and tftpf are not actively running on the host, as these services will be handled automatically from the container
 
-```
+```bash
 killall dhcpd
 killall in.tftpd
 systemctl stop tftp.service
@@ -108,7 +108,7 @@ systemctl stop tftp.socket
 On aarch64/arm64, the container also contains a build of octep_cp_agent from [github](https://github.com/MarvellEmbeddedProcessors/pcie_ep_octeon_target.git).
 See `/usr/bin/{octep_cp_agent,cn106xx.cfg}`. You can run:
 
-```
+```bash
 IMAGE=quay.io/sdaniele/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools-cp-agent -v /:/host -v /dev:/dev -it "$IMAGE" \
   exec_octep_cp_agent
