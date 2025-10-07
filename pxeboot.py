@@ -82,6 +82,10 @@ class Config:
 class RunContext(common.ImmutableDataclass):
     cfg: Config
 
+    def _field_set_once(self, key: str, val: typing.Any) -> None:
+        super()._field_set_once(key, val)
+        logger.info(f"context: initialize {key!r} to {val!r}")
+
     def host_mode_set_once(self) -> None:
         host_mode = self.cfg.cfg_host_mode
         if host_mode == "auto":
