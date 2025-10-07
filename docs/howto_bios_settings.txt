@@ -1,0 +1,326 @@
+https://docs.google.com/document/d/18tpXONTleZjvmXHTP8y07znXTmsSh1qOmgpiglGwP_k/edit?tab=t.0
+
+#############################################################
+# On the DPU
+#############################################################
+
+=================================
+Setup
+=================================
+B) Board Manufacturing Data
+C) Chip Features
+D) DRAM Options
+P) PCIe Configuration
+W) Power Options
+E) Ethernet configuration
+F) Restore factory defaults
+S) Save Settings and Exit
+X) Exit Setup, discarding changes
+
+Choice:p
+
+
+=================================
+PCIe Port Setup
+=================================
+1) PCIe Mode Selection
+2) PCIe Link Speed Selection
+3) PCIe GEN3 Preset Vector Selection
+4) PCIe GEN4 Preset Vector Selection
+5) PCIe GEN5 Preset Vector Selection
+6) PCIe GEN3 Initial Preset Value Selection
+7) PCIe GEN4 Initial Preset Value Selection
+8) PCIe GEN5 Initial Preset Value Selection
+9) PCIe Reference Clock Selection
+A) PCIe GEN2 DE-Emphasis Selection
+B) PCIe EP Script File Info
+C) PCIe EP ROM Flash File Info
+D) PCIe EP ROM Flash Write Update
+E) PCIe EP ROM Flash Write Verify
+F) PCIe EP ROM Flash Select Default Script
+G) PCIe EP Security
+H) PCIe EP Identity
+I) PCIe Gen2 Low Swing Mode Selection
+L) SDP ring configuration
+Q) Return to main menu
+
+Choice: l
+
+=================================
+SDP Ring Configuration
+=================================
+P) Number of PF rings
+V) Number of VF rings
+Q) Return to main menu
+
+Choice: P
+
+Number of rings per SDP PF. All PFs will have same number
+(INS)PF rings (8): 8
+
+=================================
+SDP Ring Configuration
+=================================
+P) Number of PF rings
+V) Number of VF rings
+Q) Return to main menu
+
+Choice: V
+
+Number of rings per SDP VF. All VFs in a SDP PF will have same numberCurrent number of PFs set: 1
+(INS)PF0 VF rings (8): 8
+
+=================================
+SDP Ring Configuration
+=================================
+P) Number of PF rings
+V) Number of VF rings
+Q) Return to main menu
+
+Choice: Q
+
+=================================
+PCIe Port Setup
+=================================
+1) PCIe Mode Selection
+2) PCIe Link Speed Selection
+3) PCIe GEN3 Preset Vector Selection
+4) PCIe GEN4 Preset Vector Selection
+5) PCIe GEN5 Preset Vector Selection
+6) PCIe GEN3 Initial Preset Value Selection
+7) PCIe GEN4 Initial Preset Value Selection
+8) PCIe GEN5 Initial Preset Value Selection
+9) PCIe Reference Clock Selection
+A) PCIe GEN2 DE-Emphasis Selection
+B) PCIe EP Script File Info
+C) PCIe EP ROM Flash File Info
+D) PCIe EP ROM Flash Write Update
+E) PCIe EP ROM Flash Write Verify
+F) PCIe EP ROM Flash Select Default Script
+G) PCIe EP Security
+H) PCIe EP Identity
+I) PCIe Gen2 Low Swing Mode Selection
+L) SDP ring configuration
+Q) Return to main menu
+
+Choice: H
+
+=================================
+PCIe EP Identity
+=================================
+P) Number of PFs
+V) Number of VFs per PF
+D) DeviceID per PF
+C) Class code per PF
+Q) Return to main menu
+
+Choice: P
+
+(INS)Number of PFs (1): 2
+
+=================================
+PCIe EP Identity
+=================================
+P) Number of PFs
+V) Number of VFs per PF
+D) DeviceID per PF
+C) Class code per PF
+Q) Return to main menu
+
+Choice: V
+
+(INS)PF0 Number of VFs (8): 4
+(INS)PF1 Number of VFs (8): 4
+
+=================================
+PCIe Port Setup
+=================================
+1) PCIe Mode Selection
+2) PCIe Link Speed Selection
+3) PCIe GEN3 Preset Vector Selection
+4) PCIe GEN4 Preset Vector Selection
+5) PCIe GEN5 Preset Vector Selection
+6) PCIe GEN3 Initial Preset Value Selection
+7) PCIe GEN4 Initial Preset Value Selection
+8) PCIe GEN5 Initial Preset Value Selection
+9) PCIe Reference Clock Selection
+A) PCIe GEN2 DE-Emphasis Selection
+B) PCIe EP Script File Info
+C) PCIe EP ROM Flash File Info
+D) PCIe EP ROM Flash Write Update
+E) PCIe EP ROM Flash Write Verify
+F) PCIe EP ROM Flash Select Default Script
+G) PCIe EP Security
+H) PCIe EP Identity
+I) PCIe Gen2 Low Swing Mode Selection
+L) SDP ring configuration
+Q) Return to main menu
+
+Choice: G
+
+
+=================================
+PCIe EP Security
+=================================
+A) Allow PCIe Host to Access Octeon Memory (0)
+S) Host Stream IDs for PEM0 ( ...)
+C) Disable host BAR0 memory window register access (0)
+Q) Return to main menu
+
+Choice: A
+
+Allow PCIe host to access Octeon Linux memory.
+This does not affect access to Octeon prior to booting Linux (i.e. U-Boot).
+Default value is 0, which means do not allow.
+1 means allow.
+(INS)Allow PCIe Host to Access Octeon Memory [0]: 1
+
+=================================
+PCIe EP Security
+=================================
+A) Allow PCIe Host to Access Octeon Memory (1)
+S) Host Stream IDs for PEM0 ( ...)
+C) Disable host BAR0 memory window register access (0)
+Q) Return to main menu
+
+Choice: S
+
+SMMU Stream IDs for PEM0.  This is a list of strings.  Each string is a
+C-style hexadecimal number.  For information about the fields of a Stream
+ID, see the "SMMU Stream IDs" section of the HRM.
+Default value is 0x30000 (just one item on the list).
+Current value:
+0x30000
+
+Enter multiple lines for new value.
+Input ends with a blank line, Ctrl-C exits with no changes.
+(INS)Host Stream IDs for PEM0(line 1): 0x3ffff
+(INS)Host Stream IDs for PEM0(line 2):
+
+=================================
+PCIe EP Identity
+=================================
+P) Number of PFs
+V) Number of VFs per PF
+D) DeviceID per PF
+C) Class code per PF
+Q) Return to main menu
+
+Choice: V
+
+(INS)PF0 Number of VFs (4): 8
+(INS)PF1 Number of VFs (4):
+
+q
+
+=================================
+SDP Ring Configuration
+=================================
+P) Number of PF rings
+V) Number of VF rings
+Q) Return to main menu
+
+Choice: V
+
+Number of rings per SDP VF. All VFs in a SDP PF will have same numberCurrent number of PFs set: 2
+(INS)PF0 VF rings (8): 4
+(INS)PF1 VF rings (8):
+
+
+
+Quit until:
+S) Save Settings and Exit
+
+
+
+#############################################################
+# Programming Juniper Switch to handle 100GBase-CR Cables (Melanox)
+#############################################################
+
+SFP
+https://store.nvidia.com/en-us/networking/store/product/mcp1600-c002e30n/nvidia-dac-cable-ethernet-100gbe-qsfp28-2m/
+MCP1600- C002E3-N (100Gbe)
+
+
+QFX5200-32C Juniper switch sw03
+
+show interfaces terse
+show interfaces et-0/0/24
+show chassis
+
+
+edit chassis fpc 0 pic 0
+delete port 24 channel-speed
+set port 24 speed 100g 
+
+fpc 0 {
+    pic 0 {
+...
+        port 20 {
+            channel-speed 10g;
+        }
+        port 21 {
+            channel-speed 10g;
+        }
+        port 24 {
+            speed 100g;
+        }
+        port 25 {
+            speed 100g;
+        }
+        port 26 {
+            speed 100g;
+        }
+        port 27 {
+            speed 100g;
+        }
+    }
+}
+
+
+Switch config:
+edit
+set interfaces et-0/0/24 gigether-options fec none
+
+=================================
+Setup - PORTM Selection
+=================================
+1) PORTM0 GSERM0.L0 - CAUI_4_C2M RSFEC
+2) PORTM1 GSERM0.L1 - INACTIVE
+3) PORTM2 GSERM0.L2 - INACTIVE
+4) PORTM3 GSERM0.L3 - INACTIVE
+5) PORTM4 GSERM1.L0 - XFI No FEC
+6) PORTM5 GSERM2.L0 - DISABLED
+Z) Return to main menu
+
+Choice: 1
+
+=================================
+Setup - PORTM0 Config Options
+=================================
+1) Configure PORTM with 1-Lane Protocols
+2) Configure PORTM with 2-Lane Protocols
+3) Configure PORTM with 4-Lane Protocols
+A) Configure 802.3AP settings
+Z) Return to main menu
+
+Choice: 3
+
+=================================
+Setup - PORTM0 Configuration
+=================================
+1) XLAUI(C2C), Serdes Speed: 10.3125G, Data Speed: 4*10
+2) XLAUI_C2M, Serdes Speed: 10.3125G, Data Speed: 4*10G
+3) 40GBASE-CR4, Serdes Speed: 10.3125G, Data Speed: 4*10G
+4) 40GBASE-KR4, Serdes Speed: 10.3125G, Data Speed: 4*10G
+5) CAUI-4_C2C, Serdes Speed: 25.78125G, Data Speed: 4*25G
+6) CAUI-4_C2M, Serdes Speed: 25.78125G, Data Speed: 4*25G
+7) 100GBASE-CR4, Serdes Speed: 25.78125G, Data Speed: 4*25G
+8) 100GBASE-KR4, Serdes Speed: 25.78125G, Data Speed: 4*25G
+Z) Return to main menu
+
+Choice: 6
+
+Program FEC
+(INS)FEC TYPE (NONE = 0, BASE_R = 1, RS_FEC = 2): 0
+
