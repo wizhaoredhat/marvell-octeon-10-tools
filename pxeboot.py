@@ -9,6 +9,7 @@ import itertools
 import json
 import logging
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -52,6 +53,7 @@ class Config:
     host_path: str = "/host"
     cfg_host_mode: str = "auto"
     dev: str = "eno4"
+    dpu_dev: str = "primary"
     cfg_ssh_keys: Optional[tuple[str, ...]] = None
     host_setup_only: bool = False
     yum_repos: str = "none"
@@ -69,6 +71,11 @@ class Config:
             raise ValueError("yum_repos")
         if self.cfg_host_mode not in ("auto", "rhel", "coreos", "ephemeral"):
             raise ValueError("hostmode")
+        if (
+            self.dpu_dev not in ("primary", "secondary")
+            and netdev.validate_ethaddr_or_none(self.dpu_dev) is None
+        ):
+            raise ValueError("dpu_dev")
 
 
 @dataclasses.dataclass(frozen=True, **common.KW_ONLY_DATACLASS)
@@ -140,6 +147,14 @@ class RunContext(common.ImmutableDataclass):
             return "marvell-dpu"
         return None
 
+    def dpu_mac_set_once(self, dpu_mac: str) -> None:
+        assert netdev.validate_ethaddr_or_none(dpu_mac)
+        self._field_set_once("dpu_mac", dpu_mac)
+
+    @property
+    def dpu_mac(self) -> str:
+        return self._field_get("dpu_mac", str)
+
 
 def nm_profile_nm_host() -> str:
     return f"""[connection]
@@ -204,7 +219,7 @@ managed=0
 class IsoKind(abc.ABC):
     NAME: typing.ClassVar[str]
     CHECK_FILES: typing.ClassVar[tuple[str, ...]]
-    DHCP_PXE_LINE: typing.ClassVar[str]
+    DHCP_PXE_FILENAME: typing.ClassVar[str]
     SSH_USER: typing.ClassVar[str] = "root"
 
     @staticmethod
@@ -254,7 +269,7 @@ class IsoKindRhel(IsoKind):
         "images/pxeboot/vmlinuz",
         "media.repo",
     )
-    DHCP_PXE_LINE = """        filename "/grubaa64.efi";"""
+    DHCP_PXE_FILENAME = "/grubaa64.efi"
 
     def setup_tftp_files(self) -> None:
         shutil.copy(f"{MNT_PATH}/images/pxeboot/vmlinuz", f"{TFTP_PATH}/pxelinux")
@@ -336,7 +351,7 @@ class IsoKindRhcos(IsoKind):
         "images/pxeboot/rootfs.img",
         "images/pxeboot/vmlinuz",
     )
-    DHCP_PXE_LINE = """        filename "/BOOTAA64.EFI";"""
+    DHCP_PXE_FILENAME = "/BOOTAA64.EFI"
     SSH_USER = "core"
 
     MNT_EFIBOOT_PATH = "/mnt/efiboot"
@@ -464,6 +479,12 @@ def parse_args() -> RunContext:
         help="Optional argument of type string for device. Default is 'eno4'.",
     )
     parser.add_argument(
+        "--dpu-dev",
+        type=str,
+        default=Config.dpu_dev,
+        help='Optional argument for interface on the DPU to use. Can be either "primary" or "1" (the default) or "secondary" or "2" or the MAC address of the interface on the DPU. The DPU\'s interface must be connected to the "--dev" where the DHCP server is started.',
+    )
+    parser.add_argument(
         "--host-path",
         type=str,
         default=Config.host_path,
@@ -561,6 +582,18 @@ def parse_args() -> RunContext:
 
     args = parser.parse_args()
 
+    if args.dpu_dev in ("1", "primary"):
+        args.dpu_dev = "primary"
+    elif args.dpu_dev in ("2", "secondary"):
+        args.dpu_dev = "secondary"
+    else:
+        try:
+            args.dpu_dev = netdev.validate_ethaddr(args.dpu_dev)
+        except ValueError:
+            parser.error(
+                'The dpu-dev is invalid. Must be "primary", "secondary" or a MAC address'
+            )
+
     cfg = Config(
         dpu_name=args.dpu_name,
         iso=args.iso,
@@ -568,6 +601,7 @@ def parse_args() -> RunContext:
         host_path=args.host_path,
         cfg_host_mode=args.host_mode,
         dev=args.dev,
+        dpu_dev=args.dpu_dev,
         cfg_ssh_keys=None if args.ssh_key is None else tuple(args.ssh_key),
         host_setup_only=args.host_setup_only,
         yum_repos=args.yum_repos,
@@ -747,7 +781,16 @@ def create_serial(ctx: RunContext) -> common.Serial:
     )
 
 
-def select_pxe_entry(ctx: RunContext, ser: common.Serial) -> None:
+def select_pxe_entry(
+    ctx: RunContext,
+    ser: common.Serial,
+    *,
+    select_boot: Optional[str] = None,
+) -> dict[str, str]:
+    logger.info(
+        f"Enter UEFI boot menu to find MAC addresses on DPU for booting {ctx.cfg.dpu_dev}"
+    )
+
     logger.info("waiting for instructions to access boot menu")
     ser.expect("Press 'B' within 10 seconds for boot menu", 30)
     time.sleep(1)
@@ -775,30 +818,106 @@ def select_pxe_entry(ctx: RunContext, ser: common.Serial) -> None:
     ser.expect("This selection will.*take you to the Boot.*Manager", 3)
     ser.send(KEY_ENTER)
     ser.expect("Device Path")
-    retry = 30
-    logger.info(f"Trying up to {retry} times to find pxe boot interface")
-    while retry:
+    search_count = 0
+    MAX_SEARCH_COUNT = 30
+
+    logger.info(f"Trying up to {MAX_SEARCH_COUNT} times to find pxe boot interface")
+
+    macs: dict[str, str] = {}
+
+    boot_entry: Optional[str] = None
+
+    re_pattern = re.compile(
+        "\x1b\\[0m\x1b\\[37m\x1b\\[40m([^\x1b]*)\x1b\\[0m\x1b\\[30m\x1b\\[47m",
+        flags=re.DOTALL,
+    )
+
+    while search_count < MAX_SEARCH_COUNT:
+        search_count += 1
         ser.send(KEY_DOWN)
-        try:
-            # TODO: FIXME: We need to read the port configuration.
-            # e.g. 80AA99887766 + number of lanes used in the SERDES
-            ser.expect("UEFI PXEv4.*MAC:(80AA99887767|000F......D4)", 0.5)
-            break
-        except Exception:
-            retry -= 1
-    if not retry:
-        msg = "Didn't find boot menu entry for PXE boot in BIOS. Did you configure a MAC addresses on the DPU?"
-        logger.info(msg)
-        raise RuntimeError(msg)
+
+        is_first = True
+        found_mac: Optional[str] = None
+
+        while True:
+            try:
+                match_content = ser.expect(
+                    re_pattern,
+                    0.80 if is_first else 0.0,
+                    verbose=False,
+                )
+            except Exception:
+                break
+
+            matches = re.finditer(re_pattern, match_content)
+            for match in matches:
+                (matched_line,) = match.groups()
+                match_mac = re.search(
+                    "^UEFI PXEv4 \\(MAC:([0-9a-fA-F]{12})\\)$", matched_line
+                )
+                if not match_mac:
+                    continue
+
+                (mac,) = match_mac.groups()
+                mac = ":".join(mac[i : i + 2] for i in range(0, len(mac), 2))
+                mac = netdev.validate_ethaddr(mac)
+                if len(macs) < 2:
+                    if not macs:
+                        devidx = "secondary"
+                    else:
+                        devidx = "primary"
+                    logger.info(f"Found boot entry for {devidx!r} and MAC {mac!r}")
+                    macs[devidx] = mac
+                found_mac = mac
+
+        if found_mac is None:
+            continue
+
+        if select_boot is None:
+            if len(macs) == 2:
+                break
+        else:
+            if select_boot == found_mac or macs.get(select_boot, None) == found_mac:
+                boot_entry = found_mac
+                break
+
+    if select_boot is None:
+        if len(macs) != 2:
+            logger.error(
+                f"Failure: no interfaces detected as after {search_count} tries"
+            )
+            raise RuntimeError("Failed to parse MAC addresses from boot menu of BIOS")
+        logger.info(f"Detected interfaces are {macs} after {search_count} tries")
+        return macs
+
+    if boot_entry is None:
+        logger.warn(
+            f"Detected interfaces are {macs} after {search_count} tries. Cannot boot requested interface {select_boot!r}"
+        )
+        raise RuntimeError(
+            f"Didn't find boot menu entry for PXE boot {select_boot!r} in BIOS. Detected interfaces: {macs}. Did you request boot on the right interface?"
+        )
     else:
-        logger.info(f"Found boot interface after {30 - retry} tries, sending enter")
+        logger.info(
+            f"Detected interfaces are {macs} after {search_count} tries. Booting {select_boot!r} (MAC {boot_entry!r})..."
+        )
         ser.send(KEY_ENTER)
         time.sleep(10)
-        # Use the ^ and v keys to select which entry is highlighted.
-        # Press enter to boot the selected OS, `e' to edit the commands
-        # before booting or `c' for a command-line.
-        # time.sleep(1)
-        # timeout = 30
+
+    return macs
+
+
+def dpu_mac_detect(ctx: RunContext) -> str:
+    if ctx.cfg.dpu_dev not in ("primary", "secondary"):
+        return netdev.validate_ethaddr(ctx.cfg.dpu_dev)
+
+    reset()
+    with create_serial(ctx) as ser:
+        macs = select_pxe_entry(ctx, ser)
+
+    logger.info(f"Detect MAC addresses on DPU are {macs} (needs {ctx.cfg.dpu_dev})")
+
+    return macs[ctx.cfg.dpu_dev]
 
 
 def write_hosts_entry(ctx: RunContext) -> None:
@@ -935,7 +1054,11 @@ def prepare_host(ctx: RunContext) -> tuple[list[str], str]:
 
 
 def setup_dhcp(ctx: RunContext) -> None:
-    common_dpu.run_dhcpd(pxe_line=ctx.iso_kind.DHCP_PXE_LINE)
+    common_dpu.run_dhcpd(
+        dhcpd_conf=common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf.pxeboot"),
+        pxe_filename=ctx.iso_kind.DHCP_PXE_FILENAME,
+        hardware_ethernet=ctx.dpu_mac,
+    )
 
 
 def create_and_mount_iso(ctx: RunContext) -> IsoKind:
@@ -992,7 +1115,7 @@ def dpu_pxeboot(ctx: RunContext) -> str:
     logger.info("Resetting card")
     reset()
     with create_serial(ctx) as ser:
-        select_pxe_entry(ctx, ser)
+        select_pxe_entry(ctx, ser, select_boot=ctx.dpu_mac)
         return wait_for_boot(ctx, ser)
 
 
@@ -1022,6 +1145,9 @@ def main() -> None:
 
     ctx.ssh_keys_set_once(ssh_keys)
     ctx.ssh_privkey_file_set_once(ssh_privkey_file)
+
+    dpu_mac = dpu_mac_detect(ctx)
+    ctx.dpu_mac_set_once(dpu_mac)
 
     if not ctx.cfg.host_setup_only:
         iso_kind = create_and_mount_iso(ctx)
