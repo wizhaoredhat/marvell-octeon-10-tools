@@ -93,6 +93,10 @@ class RunContext(common.ImmutableDataclass):
     def host_mode(self) -> str:
         return self._field_get("host_mode", str)
 
+    @property
+    def host_mode_persist(self) -> bool:
+        return self.host_mode in ("rhel", "coreos")
+
     def ssh_keys_set_once(self, ssh_keys: collections.abc.Iterable[str]) -> None:
         self._field_set_once("ssh_keys", tuple(ssh_keys))
 
@@ -940,7 +944,7 @@ def write_hosts_entry(ctx: RunContext) -> None:
 
 
 def post_pxeboot(ctx: RunContext) -> None:
-    if ctx.host_mode in ("rhel", "coreos"):
+    if ctx.host_mode_persist:
         write_hosts_entry(ctx)
 
 
@@ -1003,18 +1007,33 @@ def setup_tftp(ctx: RunContext) -> None:
 
 
 def prepare_host(ctx: RunContext) -> tuple[list[str], str]:
-    if ctx.host_mode in ("rhel", "coreos"):
+    if ctx.host_mode_persist:
         common_dpu.nmcli_setup_mngtiface(
             ifname=ctx.cfg.dev,
             chroot_path=ctx.cfg.host_path,
             ip4addr=common_dpu.host_ip4addrnet,
         )
     else:
+
+        def _cleanup() -> None:
+            host.local.run(
+                f"ip addr del {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(ctx.cfg.dev)}"
+            )
+
+        common_dpu.global_cleanup.add(_cleanup)
         host.local.run(
             f"ip addr add {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(ctx.cfg.dev)}"
         )
 
+    if not ctx.host_mode_persist:
+        common_dpu.global_cleanup.add(
+            lambda: common_dpu.nft_masquerade(
+                ifname=ctx.cfg.dev,
+                subnet=None,
+            )
+        )
     common_dpu.nft_masquerade(ifname=ctx.cfg.dev, subnet=common_dpu.dpu_subnet)
+
     host.local.run("sysctl -w net.ipv4.ip_forward=1")
 
     ssh_keys = []
