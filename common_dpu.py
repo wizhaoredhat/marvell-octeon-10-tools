@@ -32,6 +32,8 @@ TTYUSB0 = "/dev/ttyUSB0"
 TTYUSB1 = "/dev/ttyUSB1"
 
 
+global_cleanup = common.CleanupList()
+
 logger = common.ExtendedLogger("marvell_toolbox")
 
 common.log_config_logger(logging.DEBUG, logger, "ktoolbox")
@@ -145,14 +147,23 @@ def nmcli_setup_mngtiface(
     host.local.run(f"{chroot_prefix}nmcli connection up {con_spec}", die_on_error=True)
 
 
-def nft_masquerade(ifname: str, subnet: str) -> None:
-    firewall.nft_call(
-        firewall.nft_data_masquerade_up(
-            table_name=f"marvell-tools-nat-{ifname}",
+def nft_masquerade(
+    ifname: str,
+    *,
+    subnet: Optional[str] = None,
+) -> None:
+    table_name = f"marvell-tools-nat-{ifname}"
+
+    if subnet is not None:
+        data = firewall.nft_data_masquerade_up(
+            table_name=table_name,
             ifname=ifname,
             subnet=subnet,
         )
-    )
+    else:
+        data = firewall.nft_data_masquerade_down(table_name)
+
+    firewall.nft_call(data)
 
 
 def ssh_generate_key(
@@ -340,14 +351,6 @@ def ignition_storage_file(
     }
 
 
-def run_main(
-    main_fcn: Callable[[], None],
-    *,
-    extra_cleanup: Optional[Callable[[], None]] = None,
-) -> None:
-    def _cleanup() -> None:
-        common.thread_list_join_all()
-        if extra_cleanup is not None:
-            extra_cleanup()
-
-    common.run_main(main_fcn, cleanup=_cleanup)
+def run_main(main_fcn: Callable[[], None]) -> None:
+    global_cleanup.add(common.thread_list_join_all)
+    common.run_main(main_fcn, cleanup=global_cleanup)

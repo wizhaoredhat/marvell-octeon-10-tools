@@ -82,15 +82,20 @@ class Config:
 class RunContext(common.ImmutableDataclass):
     cfg: Config
 
-    def host_mode_set_once(self) -> None:
-        host_mode = self.cfg.cfg_host_mode
-        if host_mode == "auto":
-            host_mode = detect_host_mode(host_path=self.cfg.host_path)
+    def _field_set_once(self, key: str, val: typing.Any) -> None:
+        super()._field_set_once(key, val)
+        logger.info(f"context: initialize {key!r} to {val!r}")
+
+    def host_mode_set_once(self, host_mode: str) -> None:
         self._field_set_once("host_mode", host_mode)
 
     @property
     def host_mode(self) -> str:
         return self._field_get("host_mode", str)
+
+    @property
+    def host_mode_persist(self) -> bool:
+        return self.host_mode in ("rhel", "coreos")
 
     def ssh_keys_set_once(self, ssh_keys: collections.abc.Iterable[str]) -> None:
         self._field_set_once("ssh_keys", tuple(ssh_keys))
@@ -631,7 +636,9 @@ def parse_args() -> RunContext:
     return ctx
 
 
-def detect_host_mode(*, host_path: str) -> str:
+def detect_host_mode(*, host_path: str, iso_kind: Optional[IsoKind]) -> str:
+    if not isinstance(iso_kind, IsoKindRhel):
+        return "ephemeral"
     if host.local.run(
         [
             "grep",
@@ -937,7 +944,7 @@ def write_hosts_entry(ctx: RunContext) -> None:
 
 
 def post_pxeboot(ctx: RunContext) -> None:
-    if ctx.host_mode in ("rhel", "coreos"):
+    if ctx.host_mode_persist:
         write_hosts_entry(ctx)
 
 
@@ -1000,18 +1007,33 @@ def setup_tftp(ctx: RunContext) -> None:
 
 
 def prepare_host(ctx: RunContext) -> tuple[list[str], str]:
-    if ctx.host_mode in ("rhel", "coreos"):
+    if ctx.host_mode_persist:
         common_dpu.nmcli_setup_mngtiface(
             ifname=ctx.cfg.dev,
             chroot_path=ctx.cfg.host_path,
             ip4addr=common_dpu.host_ip4addrnet,
         )
     else:
+
+        def _cleanup() -> None:
+            host.local.run(
+                f"ip addr del {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(ctx.cfg.dev)}"
+            )
+
+        common_dpu.global_cleanup.add(_cleanup)
         host.local.run(
             f"ip addr add {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(ctx.cfg.dev)}"
         )
 
+    if not ctx.host_mode_persist:
+        common_dpu.global_cleanup.add(
+            lambda: common_dpu.nft_masquerade(
+                ifname=ctx.cfg.dev,
+                subnet=None,
+            )
+        )
     common_dpu.nft_masquerade(ifname=ctx.cfg.dev, subnet=common_dpu.dpu_subnet)
+
     host.local.run("sysctl -w net.ipv4.ip_forward=1")
 
     ssh_keys = []
@@ -1119,26 +1141,25 @@ def dpu_pxeboot(ctx: RunContext) -> str:
         return wait_for_boot(ctx, ser)
 
 
-_global_ctx: Optional[RunContext] = None
-
-
-def main_cleanup() -> None:
-    if _global_ctx is not None:
-        _global_ctx.ssh_privkey_file_cleanup()
-
-
 def main() -> None:
     signal.signal(signal.SIGUSR1, _signal_handler)
 
     ctx = parse_args()
 
-    global _global_ctx
-    _global_ctx = ctx
+    common_dpu.global_cleanup.add(ctx.ssh_privkey_file_cleanup)
 
     logger.info(f"pxeboot: {shlex.join(shlex.quote(s) for s in sys.argv)}")
     logger.info(f"pxeboot run context: {ctx}")
 
-    ctx.host_mode_set_once()
+    iso_kind: Optional[IsoKind] = None
+    if not ctx.cfg.host_setup_only:
+        iso_kind = create_and_mount_iso(ctx)
+        ctx.iso_kind_set_once(iso_kind)
+
+    host_mode = ctx.cfg.cfg_host_mode
+    if host_mode == "auto":
+        host_mode = detect_host_mode(host_path=ctx.cfg.host_path, iso_kind=iso_kind)
+    ctx.host_mode_set_once(host_mode)
 
     logger.info("Preparing services for Pxeboot")
     ssh_keys, ssh_privkey_file = prepare_host(ctx)
@@ -1150,8 +1171,6 @@ def main() -> None:
     ctx.dpu_mac_set_once(dpu_mac)
 
     if not ctx.cfg.host_setup_only:
-        iso_kind = create_and_mount_iso(ctx)
-        ctx.iso_kind_set_once(iso_kind)
         setup_dhcp(ctx)
         setup_tftp(ctx)
         setup_http(ctx)
@@ -1197,7 +1216,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    common_dpu.run_main(
-        main,
-        extra_cleanup=main_cleanup,
-    )
+    common_dpu.run_main(main)
