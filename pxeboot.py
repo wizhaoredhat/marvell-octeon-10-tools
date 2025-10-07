@@ -1119,21 +1119,12 @@ def dpu_pxeboot(ctx: RunContext) -> str:
         return wait_for_boot(ctx, ser)
 
 
-_global_ctx: Optional[RunContext] = None
-
-
-def main_cleanup() -> None:
-    if _global_ctx is not None:
-        _global_ctx.ssh_privkey_file_cleanup()
-
-
 def main() -> None:
     signal.signal(signal.SIGUSR1, _signal_handler)
 
     ctx = parse_args()
 
-    global _global_ctx
-    _global_ctx = ctx
+    common_dpu.global_cleanup.add(ctx.ssh_privkey_file_cleanup)
 
     logger.info(f"pxeboot: {shlex.join(shlex.quote(s) for s in sys.argv)}")
     logger.info(f"pxeboot run context: {ctx}")
@@ -1197,7 +1188,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    common_dpu.run_main(
-        main,
-        extra_cleanup=main_cleanup,
-    )
+    common_dpu.run_main(main)
