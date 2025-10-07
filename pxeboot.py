@@ -86,10 +86,7 @@ class RunContext(common.ImmutableDataclass):
         super()._field_set_once(key, val)
         logger.info(f"context: initialize {key!r} to {val!r}")
 
-    def host_mode_set_once(self) -> None:
-        host_mode = self.cfg.cfg_host_mode
-        if host_mode == "auto":
-            host_mode = detect_host_mode(host_path=self.cfg.host_path)
+    def host_mode_set_once(self, host_mode: str) -> None:
         self._field_set_once("host_mode", host_mode)
 
     @property
@@ -635,7 +632,9 @@ def parse_args() -> RunContext:
     return ctx
 
 
-def detect_host_mode(*, host_path: str) -> str:
+def detect_host_mode(*, host_path: str, iso_kind: Optional[IsoKind]) -> str:
+    if not isinstance(iso_kind, IsoKindRhel):
+        return "ephemeral"
     if host.local.run(
         [
             "grep",
@@ -1133,7 +1132,15 @@ def main() -> None:
     logger.info(f"pxeboot: {shlex.join(shlex.quote(s) for s in sys.argv)}")
     logger.info(f"pxeboot run context: {ctx}")
 
-    ctx.host_mode_set_once()
+    iso_kind: Optional[IsoKind] = None
+    if not ctx.cfg.host_setup_only:
+        iso_kind = create_and_mount_iso(ctx)
+        ctx.iso_kind_set_once(iso_kind)
+
+    host_mode = ctx.cfg.cfg_host_mode
+    if host_mode == "auto":
+        host_mode = detect_host_mode(host_path=ctx.cfg.host_path, iso_kind=iso_kind)
+    ctx.host_mode_set_once(host_mode)
 
     logger.info("Preparing services for Pxeboot")
     ssh_keys, ssh_privkey_file = prepare_host(ctx)
@@ -1145,8 +1152,6 @@ def main() -> None:
     ctx.dpu_mac_set_once(dpu_mac)
 
     if not ctx.cfg.host_setup_only:
-        iso_kind = create_and_mount_iso(ctx)
-        ctx.iso_kind_set_once(iso_kind)
         setup_dhcp(ctx)
         setup_tftp(ctx)
         setup_http(ctx)
