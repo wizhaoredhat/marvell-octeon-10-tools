@@ -1234,9 +1234,12 @@ def main() -> None:
         common_dpu.check_services_running()
 
         if ctx.cfg.prompt:
-            input(
-                "dhcp/tftp/http services started. Waiting. Press ENTER to continue or abort with CTRL+C"
-            )
+            try:
+                input(
+                    "dhcp/tftp/http services started. Waiting. Press ENTER to continue or abort with CTRL+C"
+                )
+            except KeyboardInterrupt:
+                sys.exit(0)
 
         for try_count in itertools.count(start=1):
             logger.info(f"Starting UEFI PXE Boot (try {try_count})")
