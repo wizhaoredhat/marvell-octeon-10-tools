@@ -672,7 +672,7 @@ def detect_dhcp_restricted(*, cfg_dhcp_restricted: str, dpu_mac: str) -> bool:
 
 
 def detect_host_mode(*, host_path: str, iso_kind: Optional[IsoKind]) -> str:
-    if not isinstance(iso_kind, IsoKindRhel):
+    if iso_kind is not None and not isinstance(iso_kind, IsoKindRhel):
         return "ephemeral"
     if host.local.run(
         [
@@ -1210,21 +1210,21 @@ def main() -> None:
     ctx.ssh_keys_set_once(ssh_keys)
     ctx.ssh_privkey_file_set_once(ssh_privkey_file)
 
-    dpu_mac = dpu_mac_detect(ctx)
-    ctx.dpu_mac_set_once(dpu_mac)
-
-    if is_marvell_random_mac(ctx.dpu_mac):
-        logger.warning(
-            "The MAC address on the Marvell DPU seems not stable. This might cause problems later."
-        )
-
-    dhcp_restricted = detect_dhcp_restricted(
-        cfg_dhcp_restricted=ctx.cfg.cfg_dhcp_restricted,
-        dpu_mac=ctx.dpu_mac,
-    )
-    ctx.dhcp_restricted_set_once(dhcp_restricted)
-
     if not ctx.cfg.host_setup_only:
+        dpu_mac = dpu_mac_detect(ctx)
+        ctx.dpu_mac_set_once(dpu_mac)
+
+        if is_marvell_random_mac(ctx.dpu_mac):
+            logger.warning(
+                "The MAC address on the Marvell DPU seems not stable. This might cause problems later."
+            )
+
+        dhcp_restricted = detect_dhcp_restricted(
+            cfg_dhcp_restricted=ctx.cfg.cfg_dhcp_restricted,
+            dpu_mac=ctx.dpu_mac,
+        )
+        ctx.dhcp_restricted_set_once(dhcp_restricted)
+
         setup_dhcp(ctx)
         setup_tftp(ctx)
         setup_http(ctx)
