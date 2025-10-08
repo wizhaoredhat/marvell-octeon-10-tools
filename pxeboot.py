@@ -1112,7 +1112,7 @@ def prepare_host(ctx: RunContext) -> tuple[list[str], str]:
 
 def setup_dhcp(ctx: RunContext) -> None:
     common_dpu.run_dhcpd(
-        dhcpd_conf=common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf.pxeboot"),
+        dhcpd_conf=common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"),
         pxe_filename=ctx.iso_kind.DHCP_PXE_FILENAME,
         hardware_ethernet=ctx.dpu_mac,
         dhcp_restricted=ctx.dhcp_restricted,
