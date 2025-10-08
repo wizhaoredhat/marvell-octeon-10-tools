@@ -497,7 +497,7 @@ def parse_args() -> RunContext:
         "--dpu-dev",
         type=str,
         default=Config.dpu_dev,
-        help='Optional argument for interface on the DPU to use. Can be either "primary" or "1" (the default) or "secondary" or "2" or the MAC address of the interface on the DPU. The DPU\'s interface must be connected to the "--dev" where the DHCP server is started.',
+        help='Optional argument for interface on the DPU to use. Can be either "primary" or "1" (the default) or "secondary" or "2" or the MAC address of the interface on the DPU. If it is not a MAC address, one of the first things the command does is reset the DPU to read the MAC address of the "primary" or "secondary" interface automatically. The DPU\'s interface must be connected to the "--dev" where the DHCP server is started.',
     )
     parser.add_argument(
         "--host-path",
@@ -956,10 +956,15 @@ def dpu_mac_detect(ctx: RunContext) -> str:
         return netdev.validate_ethaddr(ctx.cfg.dpu_dev)
 
     reset()
+
     with create_serial(ctx) as ser:
         macs = select_pxe_entry(ctx, ser)
 
     logger.info(f"Detect MAC addresses on DPU are {macs} (needs {ctx.cfg.dpu_dev})")
+
+    if ctx.cfg.prompt:
+        # The user might have other plans with the DPU. Reset it again.
+        reset()
 
     return macs[ctx.cfg.dpu_dev]
 
