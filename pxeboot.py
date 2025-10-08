@@ -891,6 +891,8 @@ def select_pxe_entry(
             except Exception:
                 break
 
+            is_first = False
+
             matches = re.finditer(re_pattern, match_content)
             for match in matches:
                 (matched_line,) = match.groups()
