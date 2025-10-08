@@ -85,9 +85,22 @@ class Config:
 class RunContext(common.ImmutableDataclass):
     cfg: Config
 
-    def _field_set_once(self, key: str, val: typing.Any) -> None:
-        super()._field_set_once(key, val)
-        logger.info(f"context: initialize {key!r} to {val!r}")
+    def _field_notify_set(
+        self,
+        key: str,
+        old_val: typing.Union[common._MISSING_TYPE, typing.Any],
+        val: typing.Union[common._MISSING_TYPE, typing.Any],
+    ) -> None:
+        if isinstance(old_val, common._MISSING_TYPE):
+            if isinstance(val, common._MISSING_TYPE):
+                pass
+            else:
+                logger.info(f"context[{key!r}]: initialize to {val!r}")
+        else:
+            if isinstance(val, common._MISSING_TYPE):
+                logger.info(f"context[{key!r}]: unset (was {old_val!r})")
+            else:
+                logger.info(f"context[{key!r}]: reset to {val!r} (was {old_val!r})")
 
     def host_mode_set_once(self, host_mode: str) -> None:
         self._field_set_once("host_mode", host_mode)
