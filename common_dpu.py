@@ -24,6 +24,7 @@ host_ip4addrnet = f"{host_ip4addr}/24"
 DPU_DHCPRANGE = tuple(f"172.131.100.{i}" for i in range(10, 20 + 1))
 
 ESC = "\x1b"
+KEY_UP = "\x1b[A"
 KEY_DOWN = "\x1b[B"
 KEY_ENTER = "\r\n"
 KEY_CTRL_M = "\r"

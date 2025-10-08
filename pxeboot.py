@@ -5,6 +5,7 @@ import argparse
 import collections.abc
 import dataclasses
 import datetime
+import enum
 import itertools
 import json
 import logging
@@ -27,6 +28,7 @@ from ktoolbox import netdev
 import common_dpu
 
 from common_dpu import ESC
+from common_dpu import KEY_UP
 from common_dpu import KEY_DOWN
 from common_dpu import KEY_ENTER
 from common_dpu import logger
@@ -73,13 +75,37 @@ class Config:
             raise ValueError("yum_repos")
         if self.cfg_host_mode not in ("auto", "rhel", "coreos", "ephemeral"):
             raise ValueError("hostmode")
-        if (
-            self.dpu_dev not in ("primary", "secondary")
-            and netdev.validate_ethaddr_or_none(self.dpu_dev) is None
-        ):
-            raise ValueError("dpu_dev")
         if self.cfg_dhcp_restricted not in ("auto", "yes", "no"):
             raise ValueError("dhcp_restricted")
+        Config.validate_dpu_dev(self.dpu_dev, check_normalized=True)
+
+    @staticmethod
+    def validate_dpu_dev(dpu_dev: str, *, check_normalized: bool = False) -> str:
+        def _normalize(dpu_dev: str) -> str:
+            s1 = dpu_dev.lower().strip()
+            if s1 in ("primary", "secondary"):
+                return s1
+            s2 = netdev.validate_ethaddr_or_none(dpu_dev)
+            if s2 is not None:
+                return s2
+            try:
+                val = int(dpu_dev)
+            except Exception:
+                pass
+            else:
+                if val >= 0 and val <= 4:
+                    return str(val)
+            raise ValueError("dpu_dev")
+
+        normalized = _normalize(dpu_dev)
+
+        if normalized == dpu_dev:
+            return dpu_dev
+
+        if check_normalized:
+            raise ValueError("dpu_dev is not normalized")
+
+        return normalized
 
 
 @dataclasses.dataclass(frozen=True, **common.KW_ONLY_DATACLASS)
@@ -169,20 +195,43 @@ class RunContext(common.ImmutableDataclass):
             return "marvell-dpu"
         return None
 
-    def dpu_mac_set_once(self, dpu_mac: str) -> None:
-        assert netdev.validate_ethaddr_or_none(dpu_mac)
-        self._field_set_once("dpu_mac", dpu_mac)
+    def dpu_mac_ensure(
+        self,
+        *,
+        reuse_serial_context: bool = False,
+    ) -> tuple[str, bool]:
+        in_boot_menu = False
 
-    @property
-    def dpu_mac(self) -> str:
-        return self._field_get("dpu_mac", str)
+        def _on_missing() -> str:
+            nonlocal in_boot_menu
 
-    def dhcp_restricted_set_once(self, dhcp_restricted: bool) -> None:
-        self._field_set_once("dhcp_restricted", dhcp_restricted)
+            dpu_mac2, in_boot_menu = detect_dpu_mac(
+                self,
+                reuse_serial_context=reuse_serial_context,
+            )
+            return dpu_mac2
 
-    @property
-    def dhcp_restricted(self) -> bool:
-        return self._field_get("dhcp_restricted", bool)
+        dpu_mac = self._field_get(
+            "dpu_mac",
+            str,
+            on_missing=_on_missing,
+        )
+        return dpu_mac, in_boot_menu
+
+    def dpu_macs_ensure(self) -> tuple[dict[int, str], bool]:
+        dpu_macs, in_boot_menu = self._field_get_or_create(
+            "dpu_macs",
+            dict,
+            on_missing=lambda: uefi_enter_boot_menu_and_detect_dpu_macs(self),
+        )
+        return (dpu_macs, in_boot_menu)
+
+    def dhcp_restricted_ensure(self) -> bool:
+        return self._field_init_once(
+            "dhcp_restricted",
+            lambda: detect_dhcp_restricted(self),
+            valtype=bool,
+        )
 
     def serial_create(self) -> common.Serial:
 
@@ -231,6 +280,16 @@ class RunContext(common.ImmutableDataclass):
                 return None
 
         return SerialContext()
+
+    def before_prompt_set_after(self) -> None:
+        self._field_set_once("before_prompt", True)
+
+    @property
+    def before_prompt(self) -> bool:
+        if not self.cfg.prompt:
+            return False
+        val, has = self._field_check("before_prompt", bool)
+        return not has
 
 
 def nm_profile_nm_host() -> str:
@@ -568,7 +627,7 @@ def parse_args() -> RunContext:
         "--dpu-dev",
         type=str,
         default=Config.dpu_dev,
-        help='Optional argument for interface on the DPU to use. Can be either "primary" or "1" (the default) or "secondary" or "2" or the MAC address of the interface on the DPU. If it is not a MAC address, one of the first things the command does is reset the DPU to read the MAC address of the "primary" or "secondary" interface automatically. The DPU\'s interface must be connected to the "--dev" where the DHCP server is started.',
+        help='Optional argument for interface on the DPU to use. The DPU\'s interface must be connected to the "--dev" interface on the calling host where the DHCP server is started. This can be either "primary", "secondary", the MAC address of the interface or the index. Note that "secondary" is the same as index 0. "primary" corresponds to the highest index, for example if you configure 3 secondary ports it would be the zero-based index 3. The number of secondaries depends on the EPF configuration of the DPU. If it is not a MAC address, one of the first things the command does is reset the DPU to read the configured MAC addresses.',
     )
     parser.add_argument(
         "--host-path",
@@ -674,17 +733,12 @@ def parse_args() -> RunContext:
 
     args = parser.parse_args()
 
-    if args.dpu_dev in ("1", "primary"):
-        args.dpu_dev = "primary"
-    elif args.dpu_dev in ("2", "secondary"):
-        args.dpu_dev = "secondary"
-    else:
-        try:
-            args.dpu_dev = netdev.validate_ethaddr(args.dpu_dev)
-        except ValueError:
-            parser.error(
-                'The dpu-dev is invalid. Must be "primary", "secondary" or a MAC address'
-            )
+    try:
+        dpu_dev = Config.validate_dpu_dev(args.dpu_dev)
+    except ValueError:
+        parser.error(
+            'The dpu-dev is invalid. Must be "primary", "secondary" or a MAC address or a number'
+        )
 
     cfg = Config(
         dpu_name=args.dpu_name,
@@ -693,7 +747,7 @@ def parse_args() -> RunContext:
         host_path=args.host_path,
         cfg_host_mode=args.host_mode,
         dev=args.dev,
-        dpu_dev=args.dpu_dev,
+        dpu_dev=dpu_dev,
         cfg_ssh_keys=None if args.ssh_key is None else tuple(args.ssh_key),
         host_setup_only=args.host_setup_only,
         yum_repos=args.yum_repos,
@@ -736,9 +790,11 @@ def is_marvell_random_mac(mac: str) -> bool:
     return bool(re.search("^80:aa:99:88:77:6[67]$", mac))
 
 
-def detect_dhcp_restricted(*, cfg_dhcp_restricted: str, dpu_mac: str) -> bool:
-    if cfg_dhcp_restricted != "auto":
-        return common.str_to_bool(cfg_dhcp_restricted)
+def detect_dhcp_restricted(ctx: RunContext) -> bool:
+    if ctx.cfg.cfg_dhcp_restricted != "auto":
+        return common.str_to_bool(ctx.cfg.cfg_dhcp_restricted)
+
+    dpu_mac, in_boot_menu = ctx.dpu_mac_ensure()
     return not is_marvell_random_mac(dpu_mac)
 
 
@@ -825,7 +881,8 @@ def check_host_is_booted(ctx: RunContext) -> Optional[str]:
         ips.remove(ip)
 
 
-def wait_for_boot(ctx: RunContext, ser: common.Serial) -> str:
+def wait_for_boot(ctx: RunContext) -> str:
+    ser = ctx.serial_get()
     has_ser = True
     time_start = time.monotonic()
     timeout = max(ctx.cfg.console_wait + 100.0, 1800.0)
@@ -842,6 +899,7 @@ def wait_for_boot(ctx: RunContext, ser: common.Serial) -> str:
         ):
             logger.info(f"Closing serial console {ser.port}")
             has_ser = False
+            ser.close()
 
         # We rely on configuring a static IP address on the installed host.
         #
@@ -896,15 +954,178 @@ def create_serial(*, host_path: str) -> common.Serial:
     )
 
 
-def select_pxe_entry(
+def uefi_boot_menu_process(
     ctx: RunContext,
-    ser: common.Serial,
     *,
     select_boot: Optional[str] = None,
-) -> dict[str, str]:
-    logger.info(
-        f"Enter UEFI boot menu to find MAC addresses on DPU for booting {ctx.cfg.dpu_dev}"
+) -> dict[int, str]:
+
+    if select_boot:
+        logger.info(f"Parse boot menu to start booting {select_boot!r}")
+        assert netdev.validate_ethaddr_or_none(select_boot) is not None
+    else:
+        logger.info("Parse boot menu to find all MAC addresses")
+
+    ser = ctx.serial_get()
+
+    class ParsingState(enum.IntEnum):
+        START = enum.auto()
+        SAW_START_MARKER = enum.auto()
+        PARSING = enum.auto()
+        DONE = enum.auto()
+
+    dpu_macs: dict[int, str] = {}
+
+    search_count = 0
+    MAX_SEARCH_COUNT = 50
+
+    line_pattern = re.compile(
+        "\x1b\\[0m\x1b\\[37m\x1b\\[40m([^\x1b]*)\x1b\\[0m\x1b\\[30m\x1b\\[47m",
+        flags=re.DOTALL,
     )
+
+    parsing_state = ParsingState.START
+
+    ready_to_boot = False
+
+    while parsing_state < ParsingState.DONE:
+
+        if search_count >= MAX_SEARCH_COUNT:
+            raise RuntimeError("Failure to parse boot entries (parsing did not end)")
+
+        search_count += 1
+        ser.send(KEY_DOWN)
+
+        is_first_match = True
+        found_mac: Optional[str] = None
+
+        while parsing_state < ParsingState.DONE:
+            try:
+                line_match_full = ser.expect(
+                    line_pattern,
+                    0.80 if is_first_match else 0.0,
+                    verbose=False,
+                )
+            except Exception:
+                break
+
+            # Usually, after a KEY_DOWN we only expect to find a single
+            # "line_pattern". But if there were multiple patterns inside the
+            # buffer, we would want to parse them all but care most about the
+            # last one (that is where the cursor is). This is the purpose of
+            # the loop and "is_first_match".
+            is_first_match = False
+
+            line_matches = re.finditer(line_pattern, line_match_full)
+            for line_match in line_matches:
+                (line_entry,) = line_match.groups()
+
+                is_start_marker = re.search("^UEFI Misc Device$", line_entry)
+                if is_start_marker:
+                    # We need to detect wrap around in the menu. We take this
+                    # "line_entry" as marker for that.
+                    if parsing_state == ParsingState.START:
+                        # We now see the start marker the first time. We are
+                        # armed, but not yet fully.
+                        parsing_state = ParsingState.SAW_START_MARKER
+                    elif parsing_state == ParsingState.SAW_START_MARKER:
+                        # We saw multiple start marker in a row. We keep waiting
+                        # for a good line to start parsing.
+                        pass
+                    elif parsing_state == ParsingState.PARSING:
+                        # We were parsing and saw another start marker. We are done.
+                        parsing_state = ParsingState.DONE
+                        break
+                    continue
+
+                pxe_line_match = re.search(
+                    "^UEFI PXEv4 \\(MAC:([0-9a-fA-F]{12})\\)$",
+                    line_entry,
+                )
+                if not pxe_line_match:
+                    continue
+
+                if parsing_state == ParsingState.SAW_START_MARKER:
+                    # OK, we saw the start marker and were waiting to start. Now we
+                    # are fully parsing.
+                    parsing_state = ParsingState.PARSING
+                elif parsing_state != ParsingState.PARSING:
+                    # Not yet parsing. We must first wrap around in the menu.
+                    continue
+
+                (mac,) = pxe_line_match.groups()
+                mac = ":".join(mac[i : i + 2] for i in range(0, len(mac), 2))
+                mac = netdev.validate_ethaddr(mac)
+                devidx = len(dpu_macs)
+                logger.info(f"Found PXE boot entry {devidx!r} with MAC {mac!r}")
+                dpu_macs[devidx] = mac
+
+                found_mac = mac
+
+        if select_boot is None:
+            # We only parse the menu, don't try to boot. Continue parsing
+            # until we are ParsingState.DONE.
+            continue
+
+        if select_boot != found_mac:
+            # Our cursor is not the right MAC address.
+            continue
+
+        try:
+            ser.expect(
+                line_pattern,
+                0.5,
+                verbose=False,
+            )
+        except Exception:
+            pass
+        else:
+            # We found another marker in the serial output. That must not be,
+            # in any case, the cursor is not at the right location.
+            raise RuntimeError(
+                f"Failure to select boot entry for {select_boot!r} (unexpected menu item)"
+            )
+
+        ready_to_boot = True
+        break
+
+    if not dpu_macs:
+        raise RuntimeError("Failure to parse boot entries (no PXE entries were found)")
+
+    if select_boot is None:
+        # Tap UP twice, so we are again above the start marker (see
+        # "is_start_marker").  Note that we leave the menu here after detecting
+        # the MAC addresses. The caller may decide to call the function again,
+        # this time with a "select_boot" parameter to boot. We leave the menu
+        # in a suitable state.
+        ser.send(KEY_UP * 2, sleep=0.2)
+        logger.info(f"Detected interfaces are {dpu_macs}")
+        return dpu_macs
+
+    if not ready_to_boot:
+        logger.warn(
+            f"Detected interfaces are {dpu_macs}. Cannot boot requested interface {select_boot!r}"
+        )
+        raise RuntimeError(
+            f"Didn't find boot menu entry for PXE boot {select_boot!r} in BIOS. Detected interfaces are {dpu_macs}."
+        )
+
+    logger.info(
+        f"Detected interfaces are (partial) {dpu_macs}. Booting now {select_boot!r}."
+    )
+    ser.send(KEY_ENTER, sleep=10)
+    return dpu_macs
+
+
+def uefi_reset_and_enter_boot_menu(ctx: RunContext) -> None:
+    ser = ctx.serial_get()
+
+    logger.info("Reset DPU and enter UEFI boot menu")
+
+    reset()
+
+    # Pop everything from the buffer first.
+    ser.expect(".*")
 
     logger.info("waiting for instructions to access boot menu")
     ser.expect("Press 'B' within 10 seconds for boot menu", 30)
@@ -933,113 +1154,103 @@ def select_pxe_entry(
     ser.expect("This selection will.*take you to the Boot.*Manager", 3)
     ser.send(KEY_ENTER)
     ser.expect("Device Path")
-    search_count = 0
-    MAX_SEARCH_COUNT = 30
 
-    logger.info(f"Trying up to {MAX_SEARCH_COUNT} times to find pxe boot interface")
 
-    macs: dict[str, str] = {}
+def uefi_enter_boot_menu_and_detect_dpu_macs(ctx: RunContext) -> dict[int, str]:
+    # We do a reset, enter the UEFI boot menu and search it to detect
+    # all DPU MAC addresses.
+    #
+    # Important, afterwards we are still inside the boot menu, to call
+    # uefi_boot_menu_process() to boot an entry (without need to do a
+    # full uefi_reset_and_enter_boot_menu() first).
+    logger.info("Reset and enter boot menu to find all MAC addresses")
+    uefi_reset_and_enter_boot_menu(ctx)
+    dpu_macs = uefi_boot_menu_process(ctx)
+    return dpu_macs
 
-    boot_entry: Optional[str] = None
 
-    re_pattern = re.compile(
-        "\x1b\\[0m\x1b\\[37m\x1b\\[40m([^\x1b]*)\x1b\\[0m\x1b\\[30m\x1b\\[47m",
-        flags=re.DOTALL,
-    )
+def uefi_enter_boot_menu_and_boot(ctx: RunContext) -> None:
+    logger.info(f"Reset and enter boot menu to boot dpu-dev {ctx.cfg.dpu_dev!r}")
 
-    while search_count < MAX_SEARCH_COUNT:
-        search_count += 1
-        ser.send(KEY_DOWN)
+    dpu_mac, in_boot_menu = ctx.dpu_mac_ensure(reuse_serial_context=True)
 
-        is_first = True
-        found_mac: Optional[str] = None
+    if in_boot_menu:
+        # While fetching the "dpu_mac", we also needed to fetch the "dpu_macs",
+        # which already left us inside the boot menu. We are already there. We
+        # don't need to reset again.
+        pass
+    else:
+        uefi_reset_and_enter_boot_menu(ctx)
 
-        while True:
-            try:
-                match_content = ser.expect(
-                    re_pattern,
-                    0.80 if is_first else 0.0,
-                    verbose=False,
-                )
-            except Exception:
-                break
+    # Boot the entry.
+    uefi_boot_menu_process(ctx, select_boot=dpu_mac)
 
-            is_first = False
 
-            matches = re.finditer(re_pattern, match_content)
-            for match in matches:
-                (matched_line,) = match.groups()
-                match_mac = re.search(
-                    "^UEFI PXEv4 \\(MAC:([0-9a-fA-F]{12})\\)$", matched_line
-                )
-                if not match_mac:
-                    continue
-
-                (mac,) = match_mac.groups()
-                mac = ":".join(mac[i : i + 2] for i in range(0, len(mac), 2))
-                mac = netdev.validate_ethaddr(mac)
-                if len(macs) < 2:
-                    if not macs:
-                        devidx = "secondary"
-                    else:
-                        devidx = "primary"
-                    logger.info(f"Found boot entry for {devidx!r} and MAC {mac!r}")
-                    macs[devidx] = mac
-                found_mac = mac
-
-        if found_mac is None:
-            continue
-
-        if select_boot is None:
-            if len(macs) == 2:
-                break
-        else:
-            if select_boot == found_mac or macs.get(select_boot, None) == found_mac:
-                boot_entry = found_mac
-                break
-
-    if select_boot is None:
-        if len(macs) != 2:
-            logger.error(
-                f"Failure: no interfaces detected as after {search_count} tries"
-            )
-            raise RuntimeError("Failed to parse MAC addresses from boot menu of BIOS")
-        logger.info(f"Detected interfaces are {macs} after {search_count} tries")
-        return macs
-
-    if boot_entry is None:
-        logger.warn(
-            f"Detected interfaces are {macs} after {search_count} tries. Cannot boot requested interface {select_boot!r}"
-        )
-        raise RuntimeError(
-            f"Didn't find boot menu entry for PXE boot {select_boot!r} in BIOS. Detected interfaces: {macs}. Did you request boot on the right interface?"
+def detect_dpu_mac(
+    ctx: RunContext,
+    *,
+    reuse_serial_context: bool,
+) -> tuple[str, bool]:
+    in_boot_menu = False
+    real_dpu_mac = netdev.validate_ethaddr_or_none(ctx.cfg.dpu_dev)
+    if real_dpu_mac is not None:
+        logger.info(
+            f"dpu-mac-detect: skip full detection as dpu_dev is full MAC {real_dpu_mac!r}"
         )
     else:
         logger.info(
-            f"Detected interfaces are {macs} after {search_count} tries. Booting {select_boot!r} (MAC {boot_entry!r})..."
+            f"dpu-mac-detect: parse all MAC addresses from BIOS menu to determine MAC for dpu-dev {ctx.cfg.dpu_dev!r}"
         )
-        ser.send(KEY_ENTER)
-        time.sleep(10)
+        if reuse_serial_context:
+            # We use the serial context created by the caller. In that case,
+            # if dpu_macs_ensure() ends up entering the boot menu, we want to
+            # stay there (and indicate that to the caller).
+            dpu_macs, in_boot_menu = ctx.dpu_macs_ensure()
+        else:
+            # We create a new serial context. The caller does not care whehter we
+            # stay inside the boot menu.
+            with ctx.serial_open():
+                dpu_macs, _ = ctx.dpu_macs_ensure()
 
-    return macs
+        if ctx.cfg.dpu_dev == "primary":
+            real_dpu_mac = dpu_macs[max(dpu_macs)]
+        elif ctx.cfg.dpu_dev == "secondary":
+            real_dpu_mac = dpu_macs[min(dpu_macs)]
+        else:
+            try:
+                real_dpu_mac = dpu_macs[int(ctx.cfg.dpu_dev)]
+            except (KeyError, ValueError):
+                raise RuntimeError(
+                    f"Cannot find boot entry for {ctx.cfg.dpu_dev!r}. Detected interfaces are {dpu_macs}"
+                )
 
+        logger.info(
+            f"dpu-mac-detect: detected MAC addresses {real_dpu_mac!r} for dpu-dev {ctx.cfg.dpu_dev!r} (MACs are {dpu_macs})"
+        )
 
-def dpu_mac_detect(ctx: RunContext) -> str:
-    if ctx.cfg.dpu_dev not in ("primary", "secondary"):
-        return netdev.validate_ethaddr(ctx.cfg.dpu_dev)
+        if ctx.before_prompt:
+            # We have "--prompt" option enabled, and are still before prompting.
+            #
+            # With prompting, I think the user will want to so something with the DPU. Don't
+            # let it hang in the boot menu, but reset.
+            #
+            # If we do so, we are also no longer "in_boot_menu".
+            #
+            # Note that we ignore "reuse_serial_context" for this. For one, in
+            # practice "reuse_serial_context" is always False if we are still
+            # before prompting. But regardless, that parameter is a request to
+            # leave the DPU in the boot menu if possible. It is not an absolute
+            # requirement and we can leave it in undefined (not "in_boot_menu")
+            # state.
+            in_boot_menu = False
+            reset()
 
-    reset()
+    if is_marvell_random_mac(real_dpu_mac):
+        logger.warning(
+            "The MAC address on the Marvell DPU seems not stable. This might cause problems later."
+        )
 
-    with ctx.serial_open() as ser:
-        macs = select_pxe_entry(ctx, ser)
-
-    logger.info(f"Detect MAC addresses on DPU are {macs} (needs {ctx.cfg.dpu_dev})")
-
-    if ctx.cfg.prompt:
-        # The user might have other plans with the DPU. Reset it again.
-        reset()
-
-    return macs[ctx.cfg.dpu_dev]
+    return real_dpu_mac, in_boot_menu
 
 
 def write_hosts_entry(ctx: RunContext) -> None:
@@ -1196,11 +1407,16 @@ def prepare_host(ctx: RunContext) -> None:
 
 
 def setup_dhcp(ctx: RunContext) -> None:
+    dhcp_restricted = ctx.dhcp_restricted_ensure()
+    hardware_ethernet: Optional[str] = None
+    if dhcp_restricted:
+        hardware_ethernet, in_boot_menu = ctx.dpu_mac_ensure()
+
     common_dpu.run_dhcpd(
         dhcpd_conf=common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"),
         pxe_filename=ctx.iso_kind.DHCP_PXE_FILENAME,
-        hardware_ethernet=ctx.dpu_mac,
-        dhcp_restricted=ctx.dhcp_restricted,
+        hardware_ethernet=hardware_ethernet,
+        dhcp_restricted=dhcp_restricted,
     )
 
 
@@ -1255,11 +1471,11 @@ def create_and_mount_iso(ctx: RunContext) -> IsoKind:
 
 
 def dpu_pxeboot(ctx: RunContext) -> str:
-    logger.info("Resetting card")
-    reset()
-    with ctx.serial_open() as ser:
-        select_pxe_entry(ctx, ser, select_boot=ctx.dpu_mac)
-        return wait_for_boot(ctx, ser)
+    logger.info(f"Start PXE boot with dpu-dev {ctx.cfg.dpu_dev!r}")
+    with ctx.serial_open():
+        uefi_enter_boot_menu_and_boot(ctx)
+        ip = wait_for_boot(ctx)
+    return ip
 
 
 def main() -> None:
@@ -1297,19 +1513,6 @@ def main() -> None:
     prepare_host(ctx)
 
     if not ctx.cfg.host_setup_only:
-        dpu_mac = dpu_mac_detect(ctx)
-        ctx.dpu_mac_set_once(dpu_mac)
-
-        if is_marvell_random_mac(ctx.dpu_mac):
-            logger.warning(
-                "The MAC address on the Marvell DPU seems not stable. This might cause problems later."
-            )
-
-        dhcp_restricted = detect_dhcp_restricted(
-            cfg_dhcp_restricted=ctx.cfg.cfg_dhcp_restricted,
-            dpu_mac=ctx.dpu_mac,
-        )
-        ctx.dhcp_restricted_set_once(dhcp_restricted)
 
         setup_dhcp(ctx)
         setup_tftp(ctx)
@@ -1326,6 +1529,8 @@ def main() -> None:
                 )
             except KeyboardInterrupt:
                 sys.exit(0)
+
+        ctx.before_prompt_set_after()
 
         for try_count in itertools.count(start=1):
             logger.info(f"Starting UEFI PXE Boot (try {try_count})")
