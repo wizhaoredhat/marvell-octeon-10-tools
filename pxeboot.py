@@ -1254,9 +1254,6 @@ def main() -> None:
 
     post_pxeboot(ctx)
 
-    logger.info("Terminating http, tftp, and dhcpd")
-    common_dpu.global_cleanup.cleanup()
-
     host_setup_only_msg = ""
     host_ips_msg = ""
 
@@ -1266,6 +1263,9 @@ def main() -> None:
         other_host_ips = ssh_get_ipaddrs(ctx, host_ip=host_ip)
         if other_host_ips:
             host_ips_msg = f" (or on {list(other_host_ips)}"
+
+    logger.info("Terminating http, tftp, and dhcpd")
+    common_dpu.global_cleanup.cleanup()
 
     logger.info(
         f"SUCCESS{host_setup_only_msg}. Try `ssh {ctx.iso_kind.SSH_USER}@{host_ip}`{host_ips_msg}"
