@@ -167,7 +167,8 @@ def setup_tftp(img: str) -> None:
 def setup_dhcp(dev: str) -> None:
     host.local.run(f"ip addr add 172.131.100.1/24 dev {shlex.quote(dev)}")
     common_dpu.run_dhcpd(
-        dhcpd_conf=common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf.fwupdate")
+        dhcpd_conf=common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf"),
+        pxe_filename="/grubaa64.efi",
     )
 
 
