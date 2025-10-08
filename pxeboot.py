@@ -241,24 +241,33 @@ class IsoKind(abc.ABC):
     def detect_from_iso(
         *,
         cfg_iso_kind: Optional[str] = None,
+        check_mount: bool = True,
         read_check: bool = False,
     ) -> Optional["IsoKind"]:
         if cfg_iso_kind:
             cfg_iso_kind = cfg_iso_kind.strip().lower()
+
+        is_auto = not cfg_iso_kind or cfg_iso_kind == "auto"
+
         for iso_kind_type in (IsoKindRhel, IsoKindRhcos):
             iso_kind = iso_kind_type()
-            if (
-                cfg_iso_kind
-                and cfg_iso_kind != "auto"
-                and iso_kind.NAME != cfg_iso_kind
-            ):
+
+            if not is_auto and iso_kind.NAME != cfg_iso_kind:
                 continue
-            if common_dpu.check_files(
-                iso_kind.CHECK_FILES,
-                cwd=MNT_PATH,
-                read_check=read_check,
-            ):
-                return iso_kind
+
+            if check_mount:
+                if not common_dpu.check_files(
+                    iso_kind.CHECK_FILES,
+                    cwd=MNT_PATH,
+                    read_check=read_check,
+                ):
+                    continue
+            else:
+                if is_auto:
+                    continue
+
+            return iso_kind
+
         return None
 
     def __str__(self) -> str:
@@ -1197,7 +1206,15 @@ def main() -> None:
     iso_kind: Optional[IsoKind] = None
     if not ctx.cfg.host_setup_only:
         iso_kind = create_and_mount_iso(ctx)
-        ctx.iso_kind_set_once(iso_kind)
+    else:
+        iso_kind = (
+            IsoKind.detect_from_iso(
+                cfg_iso_kind=ctx.cfg.cfg_iso_kind,
+                check_mount=False,
+            )
+            or IsoKindRhel()
+        )
+    ctx.iso_kind_set_once(iso_kind)
 
     host_mode = ctx.cfg.cfg_host_mode
     if host_mode == "auto":
