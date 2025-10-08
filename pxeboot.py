@@ -1247,7 +1247,7 @@ def main() -> None:
     post_pxeboot(ctx)
 
     logger.info("Terminating http, tftp, and dhcpd")
-    common.thread_list_join_all()
+    common_dpu.global_cleanup.cleanup()
 
     host_setup_only_msg = ""
     host_ips_msg = ""

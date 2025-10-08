@@ -32,7 +32,7 @@ TTYUSB0 = "/dev/ttyUSB0"
 TTYUSB1 = "/dev/ttyUSB1"
 
 
-global_cleanup = common.CleanupList()
+global_cleanup = common.CleanupList(common.thread_list_join_all)
 
 logger = common.ExtendedLogger("marvell_toolbox")
 
@@ -385,5 +385,4 @@ def ignition_storage_file(
 
 
 def run_main(main_fcn: Callable[[], None]) -> None:
-    global_cleanup.add(common.thread_list_join_all)
     common.run_main(main_fcn, cleanup=global_cleanup)
