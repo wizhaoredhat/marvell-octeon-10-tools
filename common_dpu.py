@@ -68,25 +68,58 @@ def run_dhcpd(
     dhcpd_conf: str,
     pxe_filename: Optional[str] = None,
     hardware_ethernet: Optional[str] = None,
+    dhcp_restricted: Optional[bool] = None,
 ) -> None:
-    logger.info(f"Configuring DHCP using {dhcpd_conf}")
+
+    if dhcp_restricted is None:
+        dhcp_restricted = hardware_ethernet is not None
+    else:
+        if hardware_ethernet is None and dhcp_restricted:
+            raise ValueError("dhcp_restricted requires a hardware_ethernet parameter")
+
+    logger.info(f"Configuring DHCP using {dhcpd_conf} (restricted={dhcp_restricted})")
 
     shutil.copy(
         dhcpd_conf,
         "/etc/dhcp/dhcpd.conf",
     )
 
-    s_pxe_filename = common.sed_escape_repl(pxe_filename or "")
-    s_hardware_ethernet = common.sed_escape_repl(hardware_ethernet or "")
+    def _sed_repl(pattern: str, val: Optional[str]) -> str:
+        val_escaped = common.sed_escape_repl(val or "")
+        return f"s/{pattern}/{val_escaped}/g"
+
+    def _sed_delete(start_tag: str, end_tag: str) -> str:
+        start = common.sed_escape_repl(start_tag)
+        end = common.sed_escape_repl(end_tag)
+        return f"/^[[:space:]]*#[[:space:]]*{start}[[:space:]]*$/,/^[[:space:]]*#[[:space:]]*{end}[[:space:]]*$/d"
+
+    sed_args = []
+
+    sed_args.append(_sed_repl("@__PXE_FILENAME__@", pxe_filename))
+    sed_args.append(_sed_repl("@__HARDWARE_ETHERNET__@", hardware_ethernet))
+    sed_args.append(
+        _sed_repl(
+            "@__DHCP_RESTRICTED__@", common.bool_to_str(dhcp_restricted, format="yes")
+        )
+    )
+
+    if hardware_ethernet is None:
+        sed_args.append(_sed_delete("__HOST_DPU_HOST_START__", "__HOST_DPU_HOST_END__"))
+
+    if dhcp_restricted:
+        sed_args.append(
+            _sed_delete("__DHCP_UNRESTRICTED_START__", "__DHCP_UNRESTRICTED_END__")
+        )
+    else:
+        sed_args.append(
+            _sed_delete("__DHCP_RESTRICTED_START__", "__DHCP_RESTRICTED_END__")
+        )
 
     host.local.run(
         [
             "sed",
             "-i",
-            "-e",
-            f"s/@__PXE_FILENAME__@/{s_pxe_filename}/",
-            "-e",
-            f"s/@__HARDWARE_ETHERNET__@/{s_hardware_ethernet}/",
+            *[arg for cmd in sed_args for arg in ["-e", cmd]],
             "/etc/dhcp/dhcpd.conf",
         ]
     )

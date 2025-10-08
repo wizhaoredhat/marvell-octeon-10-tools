@@ -10,12 +10,12 @@ allow bootp;
 
 always-broadcast on;
 
+# __HOST_DPU_HOST_START__
 host dpu-host {
     hardware ethernet @__HARDWARE_ETHERNET__@;
     fixed-address 172.131.100.100;
-    filename "@__PXE_FILENAME__@";
-    next-server 172.131.100.1;
 }
+# __HOST_DPU_HOST_END__
 
 subnet 172.131.100.0 netmask 255.255.255.0 {
     option broadcast-address 172.131.100.255;
@@ -24,9 +24,14 @@ subnet 172.131.100.0 netmask 255.255.255.0 {
     option domain-search "anl.lab.eng.bos.redhat.com";
     option dhcp-client-identifier = option dhcp-client-identifier;
 
-    deny unknown-clients;
+    filename "@__PXE_FILENAME__@";
+    next-server 172.131.100.1;
 
-    class "pxeclients" {
-        match if substring(option vendor-class-identifier, 0, 9) = "PXEClient";
-    }
+    # __DHCP_RESTRICTED_START__
+    deny unknown-clients;
+    # __DHCP_RESTRICTED_END__
+
+    # __DHCP_UNRESTRICTED_START__
+    range 172.131.100.10 172.131.100.20;
+    # __DHCP_UNRESTRICTED_END__
 }

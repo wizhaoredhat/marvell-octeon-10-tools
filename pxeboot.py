@@ -65,6 +65,7 @@ class Config:
     default_extra_packages: bool = False
     console_wait: float = 0.0
     prompt: bool = False
+    cfg_dhcp_restricted: str = "auto"
 
     def __post_init__(self) -> None:
         if self.yum_repos not in ("none", "rhel-nightly"):
@@ -76,6 +77,8 @@ class Config:
             and netdev.validate_ethaddr_or_none(self.dpu_dev) is None
         ):
             raise ValueError("dpu_dev")
+        if self.cfg_dhcp_restricted not in ("auto", "yes", "no"):
+            raise ValueError("dhcp_restricted")
 
 
 @dataclasses.dataclass(frozen=True, **common.KW_ONLY_DATACLASS)
@@ -159,6 +162,13 @@ class RunContext(common.ImmutableDataclass):
     @property
     def dpu_mac(self) -> str:
         return self._field_get("dpu_mac", str)
+
+    def dhcp_restricted_set_once(self, dhcp_restricted: bool) -> None:
+        self._field_set_once("dhcp_restricted", dhcp_restricted)
+
+    @property
+    def dhcp_restricted(self) -> bool:
+        return self._field_get("dhcp_restricted", bool)
 
 
 def nm_profile_nm_host() -> str:
@@ -584,6 +594,12 @@ def parse_args() -> RunContext:
         action="store_true",
         help="If true, install additional default packages during kickstart. See '@__DEFAULT_EXTRA_PACKAGES__@' in \"manifests/pxeboot/kickstart.ks\".",
     )
+    parser.add_argument(
+        "--dhcp-restricted",
+        choices=["auto", "yes", "no"],
+        default=Config.cfg_dhcp_restricted,
+        help='Control whether the DHCP server restricts requests to a specific MAC address. With "yes", the DHCP server only responds to the specific DPU MAC address that was detected, which is useful when running on a network with an existing DHCP server. With "no", the DHCP server responds to any PXEClient on the network. With "auto" (the default), the behavior is determined automatically based on the well known MAC address that shows up in the Marvell DPU\'s UEFI boot menu when the MAC address is not stable.',
+    )
 
     args = parser.parse_args()
 
@@ -618,6 +634,7 @@ def parse_args() -> RunContext:
         default_extra_packages=args.default_extra_packages,
         console_wait=args.console_wait,
         prompt=args.prompt,
+        cfg_dhcp_restricted=args.dhcp_restricted,
     )
 
     if not common_dpu.check_files(
@@ -634,6 +651,24 @@ def parse_args() -> RunContext:
     ctx = RunContext(cfg=cfg)
 
     return ctx
+
+
+def is_marvell_random_mac(mac: str) -> bool:
+    # By default, the MAC address is not stable. In the boot menu of the BIOS
+    # those show up as MAC:80AA99887766 and MAC:80AA99887767.
+    #
+    # In those cases, at boot time the MAC address is random, which can cause
+    # problems (for example, we cannot use "--dhcp-restrict=yes" and a RHCOS
+    # installation might fail).
+    #
+    # Consider configuring stable MAC address (see "docs/howto_fix_mac_addresses.txt").
+    return bool(re.search("^80:aa:99:88:77:6[67]$", mac))
+
+
+def detect_dhcp_restricted(*, cfg_dhcp_restricted: str, dpu_mac: str) -> bool:
+    if cfg_dhcp_restricted != "auto":
+        return common.str_to_bool(cfg_dhcp_restricted)
+    return not is_marvell_random_mac(dpu_mac)
 
 
 def detect_host_mode(*, host_path: str, iso_kind: Optional[IsoKind]) -> str:
@@ -1080,6 +1115,7 @@ def setup_dhcp(ctx: RunContext) -> None:
         dhcpd_conf=common_dpu.packaged_file("manifests/pxeboot/dhcpd.conf.pxeboot"),
         pxe_filename=ctx.iso_kind.DHCP_PXE_FILENAME,
         hardware_ethernet=ctx.dpu_mac,
+        dhcp_restricted=ctx.dhcp_restricted,
     )
 
 
@@ -1169,6 +1205,17 @@ def main() -> None:
 
     dpu_mac = dpu_mac_detect(ctx)
     ctx.dpu_mac_set_once(dpu_mac)
+
+    if is_marvell_random_mac(ctx.dpu_mac):
+        logger.warning(
+            "The MAC address on the Marvell DPU seems not stable. This might cause problems later."
+        )
+
+    dhcp_restricted = detect_dhcp_restricted(
+        cfg_dhcp_restricted=ctx.cfg.cfg_dhcp_restricted,
+        dpu_mac=ctx.dpu_mac,
+    )
+    ctx.dhcp_restricted_set_once(dhcp_restricted)
 
     if not ctx.cfg.host_setup_only:
         setup_dhcp(ctx)
