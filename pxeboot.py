@@ -15,6 +15,7 @@ import shutil
 import signal
 import sys
 import time
+import types
 import typing
 
 from typing import Optional
@@ -182,6 +183,54 @@ class RunContext(common.ImmutableDataclass):
     @property
     def dhcp_restricted(self) -> bool:
         return self._field_get("dhcp_restricted", bool)
+
+    def serial_create(self) -> common.Serial:
+
+        ser, was_created = self._field_get_or_create(
+            "serial",
+            common.Serial,
+            on_missing=lambda: create_serial(host_path=self.cfg.host_path),
+        )
+
+        if not was_created:
+            raise RuntimeError("A serial already exists. Cannot create another one")
+
+        logger.info(f"serial[{ser.port}]: creating serial connection")
+        return ser
+
+    def serial_close(self) -> None:
+        ser, had = self._field_set(
+            "serial",
+            common.MISSING,
+            valtype=common.Serial,
+            allow_exists=True,
+        )
+        logger.info(f"serial[{ser.port}]: closing serial connection")
+        ser.close()
+
+    def serial_get(self) -> common.Serial:
+        ser, has = self._field_check("serial", common.Serial)
+        if not has:
+            raise RuntimeError("Cannot access serial without creating it first")
+        return common.unwrap(ser)
+
+    def serial_open(self) -> typing.ContextManager[common.Serial]:
+        ctx = self
+
+        class SerialContext(typing.ContextManager[common.Serial]):
+            def __enter__(self) -> common.Serial:
+                return ctx.serial_create()
+
+            def __exit__(
+                self,
+                exc_type: Optional[type[BaseException]],
+                exc_value: Optional[BaseException],
+                traceback: Optional[types.TracebackType],
+            ) -> Optional[bool]:
+                ctx.serial_close()
+                return None
+
+        return SerialContext()
 
 
 def nm_profile_nm_host() -> str:
@@ -827,10 +876,12 @@ def wait_for_boot(ctx: RunContext, ser: common.Serial) -> str:
         sleep_time = max(int(sleep_time / 1.3), 9)
 
 
-def create_serial(ctx: RunContext) -> common.Serial:
+def create_serial(*, host_path: str) -> common.Serial:
     # We also write the data from the serial port to "{host_path}/tmp/pxeboot-serial-*.log"
     # on the host. For debugging, you can find what was written there.
-    log_stream_filename = f"{ctx.cfg.host_path}/tmp/pxeboot-serial.{datetime.datetime.now():%Y%m%d-%H%M%S.%f}.log"
+    log_stream_filename = (
+        f"{host_path}/tmp/pxeboot-serial.{datetime.datetime.now():%Y%m%d-%H%M%S.%f}.log"
+    )
 
     logger.info(
         f"Select entry and boot in {common_dpu.TTYUSB0} (log to {log_stream_filename})"
@@ -979,7 +1030,7 @@ def dpu_mac_detect(ctx: RunContext) -> str:
 
     reset()
 
-    with create_serial(ctx) as ser:
+    with ctx.serial_open() as ser:
         macs = select_pxe_entry(ctx, ser)
 
     logger.info(f"Detect MAC addresses on DPU are {macs} (needs {ctx.cfg.dpu_dev})")
@@ -1201,7 +1252,7 @@ def create_and_mount_iso(ctx: RunContext) -> IsoKind:
 def dpu_pxeboot(ctx: RunContext) -> str:
     logger.info("Resetting card")
     reset()
-    with create_serial(ctx) as ser:
+    with ctx.serial_open() as ser:
         select_pxe_entry(ctx, ser, select_boot=ctx.dpu_mac)
         return wait_for_boot(ctx, ser)
 
