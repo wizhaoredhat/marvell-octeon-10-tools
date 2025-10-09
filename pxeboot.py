@@ -1121,35 +1121,8 @@ def setup_tftp(ctx: RunContext) -> None:
     ctx.iso_kind.setup_tftp_files()
 
 
-def prepare_host(ctx: RunContext) -> tuple[list[str], str]:
-    if ctx.host_mode_persist:
-        common_dpu.nmcli_setup_mngtiface(
-            ifname=ctx.cfg.dev,
-            chroot_path=ctx.cfg.host_path,
-            ip4addr=common_dpu.host_ip4addrnet,
-        )
-    else:
-
-        def _cleanup() -> None:
-            host.local.run(
-                f"ip addr del {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(ctx.cfg.dev)}"
-            )
-
-        common_dpu.global_cleanup.add(_cleanup)
-        host.local.run(
-            f"ip addr add {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(ctx.cfg.dev)}"
-        )
-
-    if not ctx.host_mode_persist:
-        common_dpu.global_cleanup.add(
-            lambda: common_dpu.nft_masquerade(
-                ifname=ctx.cfg.dev,
-                subnet=None,
-            )
-        )
-    common_dpu.nft_masquerade(ifname=ctx.cfg.dev, subnet=common_dpu.dpu_subnet)
-
-    host.local.run("sysctl -w net.ipv4.ip_forward=1")
+def prepare_ssh_keys(ctx: RunContext) -> tuple[list[str], str]:
+    logger.info("Configure ssh-keys")
 
     ssh_keys = []
 
@@ -1188,6 +1161,38 @@ def prepare_host(ctx: RunContext) -> tuple[list[str], str]:
             logger.info(f"prepare-host: use SSH key {repr(k)}")
 
     return ssh_keys, ssh_privkey_file
+
+
+def prepare_host(ctx: RunContext) -> None:
+    logger.info("Configure host for Pxeboot")
+    if ctx.host_mode_persist:
+        common_dpu.nmcli_setup_mngtiface(
+            ifname=ctx.cfg.dev,
+            chroot_path=ctx.cfg.host_path,
+            ip4addr=common_dpu.host_ip4addrnet,
+        )
+    else:
+
+        def _cleanup() -> None:
+            host.local.run(
+                f"ip addr del {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(ctx.cfg.dev)}"
+            )
+
+        common_dpu.global_cleanup.add(_cleanup)
+        host.local.run(
+            f"ip addr add {shlex.quote(common_dpu.host_ip4addrnet)} dev {shlex.quote(ctx.cfg.dev)}"
+        )
+
+    if not ctx.host_mode_persist:
+        common_dpu.global_cleanup.add(
+            lambda: common_dpu.nft_masquerade(
+                ifname=ctx.cfg.dev,
+                subnet=None,
+            )
+        )
+    common_dpu.nft_masquerade(ifname=ctx.cfg.dev, subnet=common_dpu.dpu_subnet)
+
+    host.local.run("sysctl -w net.ipv4.ip_forward=1")
 
 
 def setup_dhcp(ctx: RunContext) -> None:
@@ -1285,11 +1290,11 @@ def main() -> None:
         host_mode = detect_host_mode(host_path=ctx.cfg.host_path, iso_kind=iso_kind)
     ctx.host_mode_set_once(host_mode)
 
-    logger.info("Preparing services for Pxeboot")
-    ssh_keys, ssh_privkey_file = prepare_host(ctx)
-
+    ssh_keys, ssh_privkey_file = prepare_ssh_keys(ctx)
     ctx.ssh_keys_set_once(ssh_keys)
     ctx.ssh_privkey_file_set_once(ssh_privkey_file)
+
+    prepare_host(ctx)
 
     if not ctx.cfg.host_setup_only:
         dpu_mac = dpu_mac_detect(ctx)
