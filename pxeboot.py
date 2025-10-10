@@ -291,14 +291,27 @@ class RunContext(common.ImmutableDataclass):
         val, has = self._field_check("before_prompt", bool)
         return not has
 
+    def get_ifname(self, device: str) -> str:
+        dpu_macs, in_boot_menu = self.dpu_macs_ensure()
 
-def nm_profile_nm_host() -> str:
+        if device == "primary":
+            idx = max(dpu_macs)
+        elif device == "secondary":
+            idx = min(dpu_macs)
+        else:
+            raise ValueError("device")
+
+        return f"enP2p{2+idx}s0"
+
+
+def nm_profile_nm_host(ctx: RunContext) -> str:
+    ifname = ctx.get_ifname("primary")
     return f"""[connection]
-id=enP2p3s0-dpu-host
+id={ifname}-dpu-host
 uuid={common.uuid4()}
 type=ethernet
 autoconnect-priority=10
-interface-name=enP2p3s0
+interface-name={ifname}
 
 [ipv4]
 method=auto
@@ -314,6 +327,7 @@ route-metric=120
 
 
 def nm_profile_nm_secondary(ctx: RunContext) -> str:
+    ifname = ctx.get_ifname("secondary")
     ip_address = ""
     if ctx.cfg.nm_secondary_ip_address:
         ip_address = f"address1={ctx.cfg.nm_secondary_ip_address}"
@@ -321,11 +335,11 @@ def nm_profile_nm_secondary(ctx: RunContext) -> str:
             ip_address += f",{ctx.cfg.nm_secondary_ip_gateway}"
 
     return f"""[connection]
-id=enP2p2s0-dpu-secondary
+id={ifname}-dpu-secondary
 uuid={common.uuid4()}
 type=ethernet
 autoconnect-priority=20
-interface-name=enP2p2s0
+interface-name={ifname}
 
 [ethernet]
 cloned-mac-address={ctx.cfg.nm_secondary_cloned_mac_address}
@@ -333,7 +347,7 @@ cloned-mac-address={ctx.cfg.nm_secondary_cloned_mac_address}
 [ipv4]
 method=auto
 dhcp-timeout=2147483647
-route-metric=110
+route-metric=80
 {ip_address}
 
 [ipv6]
@@ -442,7 +456,7 @@ class IsoKindRhel(IsoKind):
         )
         kickstart = kickstart.replace(
             "@__NM_PROFILE_NM_HOST__@",
-            nm_profile_nm_host(),
+            nm_profile_nm_host(ctx),
         )
         kickstart = kickstart.replace(
             "@__NM_CONF_UNMANAGED_DEVICES__@",
@@ -588,14 +602,14 @@ class IsoKindRhcos(IsoKind):
         )
         ign["storage"]["files"].append(
             common_dpu.ignition_storage_file(
-                path="/etc/NetworkManager/system-connections/enP2p3s0-dpu-host.nmconnection",
+                path="/etc/NetworkManager/system-connections/dpu-host.nmconnection",
                 mode=0o600,
-                contents=nm_profile_nm_host(),
+                contents=nm_profile_nm_host(ctx),
             )
         )
         ign["storage"]["files"].append(
             common_dpu.ignition_storage_file(
-                path="/etc/NetworkManager/system-connections/enP2p2s0-dpu-secondary.nmconnection",
+                path="/etc/NetworkManager/system-connections/dpu-secondary.nmconnection",
                 mode=0o600,
                 contents=nm_profile_nm_secondary(ctx),
             )

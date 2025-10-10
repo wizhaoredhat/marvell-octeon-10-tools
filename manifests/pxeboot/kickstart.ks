@@ -80,15 +80,15 @@ fi
 
 ################################################################################
 
-cat <<EOF > /etc/NetworkManager/system-connections/enP2p3s0-dpu-host.nmconnection
+cat <<EOF > /etc/NetworkManager/system-connections/dpu-host.nmconnection
 @__NM_PROFILE_NM_HOST__@
 EOF
-chmod 600 /etc/NetworkManager/system-connections/enP2p3s0-dpu-host.nmconnection
+chmod 600 /etc/NetworkManager/system-connections/dpu-host.nmconnection
 
-cat <<EOF > /etc/NetworkManager/system-connections/enP2p2s0-dpu-secondary.nmconnection
+cat <<EOF > /etc/NetworkManager/system-connections/dpu-secondary.nmconnection
 @__NM_PROFILE_NM_SECONDARY__@
 EOF
-chmod 600 /etc/NetworkManager/system-connections/enP2p2s0-dpu-secondary.nmconnection
+chmod 600 /etc/NetworkManager/system-connections/secondary.nmconnection
 
 ################################################################################
 
