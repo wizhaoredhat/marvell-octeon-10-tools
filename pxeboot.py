@@ -1129,12 +1129,12 @@ def uefi_reset_and_enter_boot_menu(ctx: RunContext) -> None:
 
     logger.info("waiting for instructions to access boot menu")
     ser.expect("Press 'B' within 10 seconds for boot menu", 30)
-    time.sleep(1)
+    ser.expect(None, 1)
     logger.info("Pressing B to access boot menu")
     ser.send("b")
     logger.info("waiting for instructions to Boot from Secondary Boot Device")
     ser.expect("2\\) Boot from Secondary Boot Device", 10)
-    time.sleep(1)
+    ser.expect(None, 1)
     ser.send("2")
     logger.info("waiting to escape to UEFI boot menu")
     ser.expect("Press ESCAPE for boot options", 60)
@@ -1147,7 +1147,7 @@ def uefi_reset_and_enter_boot_menu(ctx: RunContext) -> None:
     )
     logger.info("pressing down")
     ser.send(KEY_DOWN)
-    time.sleep(1)
+    ser.expect(None, 1)
     logger.info("pressing down again")
     ser.send(KEY_DOWN)
     logger.info("waiting for Boot manager entry")
@@ -1517,6 +1517,7 @@ def main() -> None:
         setup_dhcp(ctx)
         setup_tftp(ctx)
         setup_http(ctx)
+
         logger.info("Giving services time to settle")
         time.sleep(3)
 
