@@ -140,24 +140,14 @@ sudo podman run --pull always --rm --replace --privileged --pid host --network h
 
 #### Preparation
 
-1) Potential problem: The Red Hat CI clusters are usually configured for a two-cluster setup. In
-this case, the DPU's secondary interface (`enP2p2s0`) is connected to an
-interface on the provisioning host (usually `eno12409`). There we have address
-172.16.3.1/24 and a dhcpd service running.  This provides the DPU with an
-address. Also, we tend to configure NAT, so the DPU can actually reach
-192.168.122.1 (where AssistedInstaller is listening). However, the DPU cannot
-reach 192.168.122.99. We may want to connect the DPU's secondary interface to
-the same network as the Openshift cluster. For example:
-```bash
-# On provisioning host:
-ip addr del 172.16.3.1/24 dev eno12409
-ip link set eno12409 master virbr0
-systemctl restart dhcpd
+1) Ensure proper [Ethernet Port Setup](docs/howto_ethernet.md). You will want
+to have at least two secondary interfaces on the DPU, one to use for the OCP
+network (192.168.122.0/24?) and one for external.
 
-# Reactivate profile on DPU (or boot RHCOS ISO afterwards).
-# Note that we got a suitable 192.168.122.0/24 address to
-# directly reach the OCP cluster.
-```
+In our original two-cluster setup, we only had the slow(er) primary (RJ45) interface
+and one secondary. That is almost too limited. You would need to come up with some
+elaborate network configuration (e.g. use the primary interface for the OCP network
+or maybe some VLANs on the secondary?). Just configure more secondary ports.
 
 2) Potential problem: the MAC address on the DPU may be random. That causes problems
 because RHCOS wants to boot with `ip=$MAC:dhcp` on the command line. If the MAC address
@@ -197,10 +187,17 @@ printf 'INFRAENV_ID=%q\n' "$INFRAENV_ID"
 aicli -u 0.0.0.0:8090 info infraenv "$INFRAENV_ID"
 ```
 
-3) Run pxeboot command on Marvell Host like
+3) Run pxeboot command on Marvell Host. Usually, we run this command on the
+DPU's host and use an interface connected to the primary network. That way, the
+tool has access to `/dev/ttyUSB0` and can automatically reboot.
+\
+You may also be able to run the pxeboot command on another host on a connected
+network. For example, using the `--prompt` option, to only start the DHCP, TFTP
+and HTTP servers. See also the `--dpu-dev` option to PXE boot from a secondary
+interface.
 ```bash
 IMAGE=quay.io/sdaniele/marvell-tools:latest
-podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it \
+sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it \
     "$IMAGE" \
     ./pxeboot.py \
     "$DOWNLOAD_URL" \
