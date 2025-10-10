@@ -6,7 +6,8 @@ The Marvell DPU has a RJ45 dataport (we call "primary") and a configurable
 secondary port. The secondary port is connected to a QSFP cable. In the EBF we
 can configure 1 to 4 ports and MAC addresses.
 
-Ports -----
+Ports
+-----
 
 The secondary ports will be numbered first, depending on the configured number
 they will get names (`enP2p{2-5}s0`). The primary port comes after, for
@@ -18,14 +19,15 @@ PXE boot. Altough, the other ports would work too, if we start the DHCP
 services on the right network. The pxeboot tool can handle that, see
 `--dpu-dev` option.
 
-MAC Address -----------
+MAC Address
+-----------
 
 By default, the MAC address is unstable. In the UEFI boot menu we see with the
 [Original Setup](original-setup) the MAC addresses
 
-   UEFI PXEv4 (MAC:80AA99887766) << secondary
-   ...
-   UEFI PXEv4 (MAC:80AA99887767) << primary
+    UEFI PXEv4 (MAC:80AA99887766) << secondary
+    ...
+    UEFI PXEv4 (MAC:80AA99887767) << primary
 
 but later the MAC addresses are randomize.
 
@@ -120,9 +122,12 @@ no carrier.
 Originally we configured "No FEC" mode. The switch can be configured for that
 mode, but I noticed that our Junos Switch is very adament to reset that mode
 (for example, when deleting and recreating the interface configuration in the
-switch). On the Junos Switch check `cli -c "show interfaces et-0/0/24:0; quit
-"`. I was able to reconfigure the FEC mode on Junos with
+switch). On the Junos Switch check
+```
+cli -c "show interfaces et-0/0/24:0; quit
+```
 
+I was able to reconfigure the FEC mode on Junos with
 ```
 cli -c "configure; edit interfaces et-0/0/24:0; set gigether-options fec none; commit; commit and-quit; quit"
 ```
