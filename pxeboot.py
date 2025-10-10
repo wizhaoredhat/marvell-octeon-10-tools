@@ -927,7 +927,7 @@ def wait_for_boot(ctx: RunContext) -> str:
             while (
                 (now := time.monotonic()) < sleep_end_time
             ) and not _signal_sigusr1_received:
-                ser.expect(pattern=None, timeout=min(2.0, sleep_end_time - now))
+                ser.sleep(min(2.0, sleep_end_time - now))
         else:
             time.sleep(sleep_time)
 
@@ -1129,12 +1129,12 @@ def uefi_reset_and_enter_boot_menu(ctx: RunContext) -> None:
 
     logger.info("waiting for instructions to access boot menu")
     ser.expect("Press 'B' within 10 seconds for boot menu", 30)
-    ser.expect(None, 1)
+    ser.sleep(1)
     logger.info("Pressing B to access boot menu")
     ser.send("b")
     logger.info("waiting for instructions to Boot from Secondary Boot Device")
     ser.expect("2\\) Boot from Secondary Boot Device", 10)
-    ser.expect(None, 1)
+    ser.sleep(1)
     ser.send("2")
     logger.info("waiting to escape to UEFI boot menu")
     ser.expect("Press ESCAPE for boot options", 60)
@@ -1147,7 +1147,7 @@ def uefi_reset_and_enter_boot_menu(ctx: RunContext) -> None:
     )
     logger.info("pressing down")
     ser.send(KEY_DOWN)
-    ser.expect(None, 1)
+    ser.sleep(1)
     logger.info("pressing down again")
     ser.send(KEY_DOWN)
     logger.info("waiting for Boot manager entry")
