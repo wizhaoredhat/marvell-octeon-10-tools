@@ -1,1 +1,443 @@
-omitted
+SCP: 
+SCP: SCP BL1 is Alive!
+SCP: 12.25.06.g74f7f966 g74f7f966 Fri, 13 Jun 2025 20:50:41 +0000
+SCP: Detected chip b9, platform 0
+SCP: Boot security state: new chip
+SCP: RST_LBOOT=0x8: CHIP_SOFT 
+SCP: Previous RST_LBOOT=0x8: CHIP_SOFT 
+SCP: Number of AP cores present::24 TAD's present::24
+SCP: Starting Firmware Loading (AP, MCP and ECP)
+SCP: Booting from SPI1.CS0 (Secondary image0)
+SCP: SCP BL0 used: 25MHz(x4)
+SCP: SCP BL1: xSPI1.CS0 will use 25MHz x4
+SCP: Enabling CMD extensions, val = 0
+SCP: Loading ECP BL1...
+SCP: Loading MCP BL1...
+SCP: Loading AP BL1...
+SCP: copying AP_BL1 to 0 in LLC
+SCP: Starting up AP BL1
+SCP: Releasing Core0 out of reset
+
+
+Marvell CN10K SOC
+PASS: CRC32 verification
+Transferring to thread scheduler
+=======================
+Marvell CN10k Boot Stub
+=======================
+Firmware Version: 2025-09-18 00:27:57
+EBF Version: 12.25.06, Branch: /sdk/SDK12.25.06/cn10ka-release-output/build/marvell-external-fw-SDK12.25.06/firmware/ebf, Built: Thu, 18 Sep 2025 00:26:17 +0000
+
+Board Model:    crb106-pcie
+Board Revision: r1p1
+Board Serial:   WA-CN106-A1-PCIE-2P100-R1-058
+
+Chip:  0xb9 Pass A1
+SKU:   MV-CN10624-A1-AAP
+LLC:   49152 KB
+Boot:  SPI0_CS0,SPI1_CS0, using SPI1_CS0
+AVS:   Enabled
+
+Press 'B' within 4 seconds for boot menu
+
+=================================
+Boot Options
+=================================
+1) Boot from Primary Boot Device
+2) Boot from Secondary Boot Device
+N) Boot Normally
+S) Enter Setup
+D) Enter DRAM Diagnostics
+K) Burn boot flash using Kermit
+U) Change baud rate and flow control
+R) Reboot
+
+Choice: S
+
+
+=================================
+Setup
+=================================
+B) Board Manufacturing Data
+C) Chip Features
+D) DRAM Options
+P) PCIe Configuration
+W) Power Options
+E) Ethernet configuration
+F) Restore factory defaults
+S) Save Settings and Exit
+X) Exit Setup, discarding changes
+
+Choice: B
+
+Board manufacturing data is stored in a different location in
+flash than other configuration items, so the settings in this
+menu persist across software upgrades. Once set, these should
+normally not be changed.
+
+=================================
+Setup - Board
+=================================
+B) Board Model Number (crb106-pcie)
+R) Board Revision (r1p1)
+S) Serial Number (WA-CN106-A1-PCIE-2P100-R1-058)
+M) Base MAC Address (0x000fb70655d0)	<=== use this value as the first MAC address
+N) Number of MAC Addresses (5)
+I) MAC Address per port
+W) Save Board Manufacturing Data to Flash
+Q) Return to main menu
+
+Choice: N
+
+The number of MAC addresses assigned to the on-chip network
+ports. See BOARD-MAC-ADDRESS for the actual MAC address numeric
+value.This parameter is stored in a static board manufacturing
+area at the top of the boot flash.
+(INS)Number of MAC Addresses [5]: 16
+
+=================================
+Setup - Board
+=================================
+B) Board Model Number (crb106-pcie)
+R) Board Revision (r1p1)
+S) Serial Number (WA-CN106-A1-PCIE-2P100-R1-058)
+M) Base MAC Address (0x000fb70655d0)
+N) Number of MAC Addresses (16)
+I) MAC Address per port
+W) Save Board Manufacturing Data to Flash
+Q) Return to main menu
+
+Choice: I
+
+Some boards need to setup random MAC address to on-chip network ports.
+Choose the relevant menu options to set specific port/index MAC.
+Index mapping is like ID0 - RPM0 LMAC0, ID1 - RPM0 LMAC1 .. ID4 - RPM1 LMAC0 etc.
+This overrides the options "Base MAC Address and Number of MAC Addresses"
+
+=================================
+Menu Per Port MAC Address
+=================================
+Z) Total count of MAC Addresses (0)
+X) Return to main menu
+
+Choice: Z
+
+The number of MAC addresses assigned to the on-chip network
+ports. See BOARD-MAC-ADDRESS-ID for further details.
+This parameter is stored in a static board
+manufacturing area at the top of the boot flash.
+(INS)Total count of MAC Addresses [0]: 16
+
+=================================
+Menu Per Port MAC Address
+=================================
+Z) Total count of MAC Addresses (16)
+X) Return to main menu
+1) BOARD-MAC-ADDRESS-ID0 (0x000000000000)
+2) BOARD-MAC-ADDRESS-ID1 (0x000000000000)
+3) BOARD-MAC-ADDRESS-ID2 (0x000000000000)
+4) BOARD-MAC-ADDRESS-ID3 (0x000000000000)
+5) BOARD-MAC-ADDRESS-ID4 (0x000000000000)
+6) BOARD-MAC-ADDRESS-ID5 (0x000000000000)
+7) BOARD-MAC-ADDRESS-ID6 (0x000000000000)
+8) BOARD-MAC-ADDRESS-ID7 (0x000000000000)
+9) BOARD-MAC-ADDRESS-ID8 (0x000000000000)
+A) BOARD-MAC-ADDRESS-ID9 (0x000000000000)
+B) BOARD-MAC-ADDRESS-ID10 (0x000000000000)
+C) BOARD-MAC-ADDRESS-ID11 (0x000000000000)
+D) BOARD-MAC-ADDRESS-ID12 (0x000000000000)
+E) BOARD-MAC-ADDRESS-ID13 (0x000000000000)
+F) BOARD-MAC-ADDRESS-ID14 (0x000000000000)
+G) BOARD-MAC-ADDRESS-ID15 (0x000000000000)
+
+Choice: 1
+
+Index mapping is like ID0-RPM0 LMAC0, ID1 - RPM0 LMAC1 ..
+ID4 - RPM1 LMAC0 etc.
+The format of this parameter is 0xXXXXXXXXXXXX,
+12 hex digits starting with '0x'.This parameter is stored in a
+static board manufacturing area at the top of the boot flash.
+(INS)BOARD-MAC-ADDRESS-ID0 (0x000000000000): 0x000fb70655d0
+
+=================================
+Menu Per Port MAC Address
+=================================
+Z) Total count of MAC Addresses (16)
+X) Return to main menu
+1) BOARD-MAC-ADDRESS-ID0 (0x000fb70655d0)
+2) BOARD-MAC-ADDRESS-ID1 (0x000000000000)
+3) BOARD-MAC-ADDRESS-ID2 (0x000000000000)
+4) BOARD-MAC-ADDRESS-ID3 (0x000000000000)
+5) BOARD-MAC-ADDRESS-ID4 (0x000000000000)
+6) BOARD-MAC-ADDRESS-ID5 (0x000000000000)
+7) BOARD-MAC-ADDRESS-ID6 (0x000000000000)
+8) BOARD-MAC-ADDRESS-ID7 (0x000000000000)
+9) BOARD-MAC-ADDRESS-ID8 (0x000000000000)
+A) BOARD-MAC-ADDRESS-ID9 (0x000000000000)
+B) BOARD-MAC-ADDRESS-ID10 (0x000000000000)
+C) BOARD-MAC-ADDRESS-ID11 (0x000000000000)
+D) BOARD-MAC-ADDRESS-ID12 (0x000000000000)
+E) BOARD-MAC-ADDRESS-ID13 (0x000000000000)
+F) BOARD-MAC-ADDRESS-ID14 (0x000000000000)
+G) BOARD-MAC-ADDRESS-ID15 (0x000000000000)
+
+Choice: 2
+
+Index mapping is like ID0-RPM0 LMAC0, ID1 - RPM0 LMAC1 ..
+ID4 - RPM1 LMAC0 etc.
+The format of this parameter is 0xXXXXXXXXXXXX,
+12 hex digits starting with '0x'.This parameter is stored in a
+static board manufacturing area at the top of the boot flash.
+(INS)BOARD-MAC-ADDRESS-ID1 (0x000000000000): 0x000fb70655d0 1
+...
+
+=================================
+Menu Per Port MAC Address
+=================================
+Z) Total count of MAC Addresses (16)
+X) Return to main menu
+1) BOARD-MAC-ADDRESS-ID0 (0x000fb70655d0)
+2) BOARD-MAC-ADDRESS-ID1 (0x000fb70655d1)
+3) BOARD-MAC-ADDRESS-ID2 (0x000fb70655d2)
+4) BOARD-MAC-ADDRESS-ID3 (0x000fb70655d3)
+5) BOARD-MAC-ADDRESS-ID4 (0x000fb70655d4)
+6) BOARD-MAC-ADDRESS-ID5 (0x000fb70655d5)
+7) BOARD-MAC-ADDRESS-ID6 (0x000fb70655d6)
+8) BOARD-MAC-ADDRESS-ID7 (0x000fb70655d7)
+9) BOARD-MAC-ADDRESS-ID8 (0x000fb70655d8)
+A) BOARD-MAC-ADDRESS-ID9 (0x000fb70655d9)
+B) BOARD-MAC-ADDRESS-ID10 (0x000fb70655da)
+C) BOARD-MAC-ADDRESS-ID11 (0x000fb70655db)
+D) BOARD-MAC-ADDRESS-ID12 (0x000fb70655dc)
+E) BOARD-MAC-ADDRESS-ID13 (0x000fb70655dd)
+F) BOARD-MAC-ADDRESS-ID14 (0x000fb70655de)
+G) BOARD-MAC-ADDRESS-ID15 (0x000fb70655df)
+
+Choice: X
+
+
+=================================
+Setup - Board
+=================================
+B) Board Model Number (crb106-pcie)
+R) Board Revision (r1p1)
+S) Serial Number (WA-CN106-A1-PCIE-2P100-R1-058)
+M) Base MAC Address (0x000fb70655d0)
+N) Number of MAC Addresses (16)
+I) MAC Address per port
+W) Save Board Manufacturing Data to Flash
+Q) Return to main menu
+
+Choice: W
+
+Board information written to flash
+
+=================================
+Setup - Board
+=================================
+B) Board Model Number (crb106-pcie)
+R) Board Revision (r1p1)
+S) Serial Number (WA-CN106-A1-PCIE-2P100-R1-058)
+M) Base MAC Address (0x000fb70655d0)
+N) Number of MAC Addresses (16)
+I) MAC Address per port
+W) Save Board Manufacturing Data to Flash
+Q) Return to main menu
+
+Choice: Q
+
+
+=================================
+Setup
+=================================
+B) Board Manufacturing Data
+C) Chip Features
+D) DRAM Options
+P) PCIe Configuration
+W) Power Options
+E) Ethernet configuration
+F) Restore factory defaults
+S) Save Settings and Exit
+X) Exit Setup, discarding changes
+
+Choice: S
+
+Saving settings
+SCP: 
+SCP: SCP BL1 is Alive!
+SCP: 12.25.06.g74f7f966 g74f7f966 Fri, 13 Jun 2025 20:50:41 +0000
+SCP: Detected chip b9, platform 0
+SCP: Boot security state: new chip
+SCP: RST_LBOOT=0x8: CHIP_SOFT 
+SCP: Previous RST_LBOOT=0x8: CHIP_SOFT 
+SCP: Number of AP cores present::24 TAD's present::24
+SCP: Starting Firmware Loading (AP, MCP and ECP)
+SCP: Booting from SPI1.CS0 (Secondary image0)
+SCP: SCP BL0 used: 25MHz(x4)
+SCP: SCP BL1: xSPI1.CS0 will use 25MHz x4
+SCP: Enabling CMD extensions, val = 0
+SCP: Loading ECP BL1...
+SCP: Loading MCP BL1...
+SCP: Loading AP BL1...
+SCP: copying AP_BL1 to 0 in LLC
+SCP: Starting up AP BL1
+SCP: Releasing Core0 out of reset
+
+
+
+Marvell CN10K SOC
+PASS: CRC32 verification
+Transferring to thread scheduler
+=======================
+Marvell CN10k Boot Stub
+=======================
+Firmware Version: 2025-09-18 00:27:57
+EBF Version: 12.25.06, Branch: /sdk/SDK12.25.06/cn10ka-release-output/build/marvell-external-fw-SDK12.25.06/firmware/ebf, Built: Thu, 18 Sep 2025 00:26:17 +0000
+
+Board Model:    crb106-pcie
+Board Revision: r1p1
+Board Serial:   WA-CN106-A1-PCIE-2P100-R1-058
+
+Chip:  0xb9 Pass A1
+SKU:   MV-CN10624-A1-AAP
+LLC:   49152 KB
+Boot:  SPI0_CS0,SPI1_CS0, using SPI1_CS0
+AVS:   Enabled
+
+Press 'B' within 4 seconds for boot menu
+
+=================================
+Boot Options
+=================================
+1) Boot from Primary Boot Device
+2) Boot from Secondary Boot Device
+N) Boot Normally
+S) Enter Setup
+D) Enter DRAM Diagnostics
+K) Burn boot flash using Kermit
+U) Change baud rate and flow control
+R) Reboot
+
+Choice: 1
+
+Booting from primary boot device.
+SCP: 
+SCP: SCP BL1 is Alive!
+SCP: 12.25.06.g74f7f966 g74f7f966 Fri, 13 Jun 2025 20:50:41 +0000
+SCP: Detected chip b9, platform 0
+SCP: Boot security state: new chip
+SCP: RST_LBOOT=0x8: CHIP_SOFT 
+SCP: Previous RST_LBOOT=0x8: CHIP_SOFT 
+SCP: Number of AP cores present::24 TAD's present::24
+SCP: Starting Firmware Loading (AP, MCP and ECP)
+SCP: Booting from SPI0.CS0 (Primary image0)
+SCP: SCP BL0 used: 12.5MHz(x1)
+SCP: SCP BL1: xSPI0.CS0 will use 25MHz x4
+SCP: Enabling CMD extensions, val = 0
+SCP: Loading ECP BL1...
+SCP: LDR: Invalid TIMH block at offset 0xd0000
+SCP: image loading failed [3]
+SCP: Trying SPI safe mode
+SCP: SCP BL1: xSPI0.CS0 will use 12.5MHz x1
+SCP: Re-loading image
+SCP: Loading MCP BL1...
+SCP: Loading AP BL1...
+SCP: copying AP_BL1 to 0 in LLC
+SCP: Starting up AP BL1
+SCP: Releasing Core0 out of reset
+
+
+
+Marvell CN10K SOC
+PASS: CRC32 verification
+Transferring to thread scheduler
+=======================
+Marvell CN10k Boot Stub
+=======================
+Firmware Version: 2025-07-10 21:08:20
+EBF Version: 12.25.06, Branch: /sdk/SDK12.25.06/cn10ka-vpp-release-output/build/marvell-external-fw-SDK12.25.06/firmware/ebf, Built: Thu, 10 Jul 2025 21:06:39 +0000
+
+Board Model:    crb106-pcie
+Board Revision: r1p1
+Board Serial:   WA-CN106-A1-PCIE-2P100-R1-058
+
+Chip:  0xb9 Pass A1
+SKU:   MV-CN10624-A1-AAP
+LLC:   49152 KB
+Boot:  SPI0_CS0,SPI1_CS0, using SPI0_CS0
+AVS:   Enabled
+
+Press 'B' within 4 seconds for boot menu
+==================
+Marvell CN10K Init
+==================
+EBF Version: 12.25.06, Branch: /sdk/SDK12.25.06/cn10ka-vpp-release-output/build/marvell-external-fw-SDK12.25.06/firmware/ebf, Built: Thu, 10 Jul 2025 21:06:39 +0000
+
+CORECLK:  2000 Mhz
+MESHCLK:  1500 Mhz
+SCLK:     1000 Mhz
+DFICLK:   800 Mhz
+
+PCIe2: Link active, 2 lanes, speed gen4
+DMC0/1:  4 GB/ch, 1Rx16, SODIMM, 32-bit data, 8-bit ECC
+DMC2/3:  8 GB/ch, 1Rx8, SODIMM, 32-bit data, 4-bit ECC
+DMC4/5:  8 GB/ch, 1Rx8, SODIMM, 32-bit data, 4-bit ECC
+DRAM: 40 GB, 3200 MT/s, DDR5
+TIM0 board information:
+    Chip ID: b9
+    Manufacturer: Marvell Technology, Inc.
+    SDK Version: SDK12
+
+switch_fw_super.fw   version: 01.01.0D 20250627-0138 00000000
+switch_fw_ap.fw      version: 01.01.0D 20250627-0138 00000000
+npc_mkex-cn10xx.fw   version: 01.12.00 20250627-0138 00000000
+u-boot-nodtb.bin     version: 0C.19.06 20250710-2104 00000000
+bl31.bin             version: 0C.19.06 20250710-2104 00000000
+bl2.bin              version: 0C.19.06 20250710-2104 00000000
+gserp-cn10xx.fw      version: 01.01.0D 20250627-0138 00000000
+gserm-cn10xx.fw      version: 01.01.10 20250627-0138 00000000
+init.bin             version: 0C.19.06 20250710-2103 00000000
+ecp_bl1.bin          version: 0C.19.05 20250501-1445 00000000
+mcp_bl1.bin          version: 0C.19.02 20250131-0903 00000000
+scp_bl1.bin          version: 0C.19.06 20250613-2040 00000000
+rom-script0.fw       version: 0C.19.06 20250710-2103 00000000
+tim0                 version: 0C.19.06 20250710-2103 00000000
+    Loading image file '/rawfs/bl2.bin'
+---
+NOTICE:  BL2: v2.8(release): (Marvell-12.25.06)
+NOTICE:  BL2: Built : 14:05:57, Jul 10 2025
+NOTICE:  Secure Non Preserve Memory Region: 0x0 to 0xffffff (16MB)
+NOTICE:  Non-Secure Non Preserve Memory Region: 0x1000000 to 0x5ffffffff (24560MB)
+NOTICE:  LMT Memory Region: 0x9fb000000 to 0x9ffffffff (80MB)
+NOTICE:  Non-Secure Non Preserve Memory Region 1: 0x600000000 to 0x9faffffff (16304MB)
+NOTICE:  BL2: Booting BL31
+NOTICE:  BL31: v2.8(release): (Marvell-12.25.06)
+NOTICE:  BL31: Built : 14:06:39, Jul 10 2025
+NOTICE:  SCMI driver initialized
+NOTICE:  GPIO handlers registered
+
+
+U-Boot 2023.01-12.25.06 (Jul 10 2025 - 14:03:36 -0700)
+
+Model: Marvell CN106XX board
+Board: crb106-pcie
+DRAM:  39.9 GiB
+Core:  57 devices, 19 uclasses, devicetree: board
+WDT:   Started watch-dog@8020000a0000 with servicing every 1000ms (60s timeout)
+MMC:   sdhci@824000000000: 0
+Loading Environment from SPIFlash... SF: Detected w25q256fw with page size 256 Bytes, erase size 4 KiB, total 32 MiB
+OK
+In:    serial
+Out:   serial
+Err:   serial
+Working FDT set to 9f6d08e80
+PORTM0: RPM0 LMAC0 [10G_R]
+PORTM1: RPM0 LMAC1 [10G_R]
+PORTM2: RPM0 LMAC2 [10G_R]
+PORTM3: RPM0 LMAC3 [10G_R]
+PORTM4: RPM1 LMAC0 [10G_R]
+
+Skip Switch micro-init option is set
+Net:   eth0: rvu_pf#0, eth1: rvu_pf#1, eth2: rvu_pf#2, eth3: rvu_pf#3, eth4: rvu_pf#4
+Hit any key to stop autoboot:  5  4  0 
+crb106-pcie> 
