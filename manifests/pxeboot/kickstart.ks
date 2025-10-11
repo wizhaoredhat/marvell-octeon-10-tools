@@ -88,7 +88,7 @@ chmod 600 /etc/NetworkManager/system-connections/dpu-host.nmconnection
 cat <<EOF > /etc/NetworkManager/system-connections/dpu-secondary.nmconnection
 @__NM_PROFILE_NM_SECONDARY__@
 EOF
-chmod 600 /etc/NetworkManager/system-connections/secondary.nmconnection
+chmod 600 /etc/NetworkManager/system-connections/dpu-secondary.nmconnection
 
 ################################################################################
 
