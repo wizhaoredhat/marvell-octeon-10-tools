@@ -19,6 +19,11 @@ PXE boot. Altough, the other ports would work too, if we start the DHCP
 services on the right network. The pxeboot tool can handle that, see
 `--dpu-dev` option.
 
+Note that the Marvell Vendor Specific Plugin of
+[dpu-operator](https://github.com/openshift/dpu-operator/) will add the first
+secondary interface (`enP2p2s0`) to the OVS bridge. You will want to use that
+for the external network.
+
 MAC Address
 -----------
 
