@@ -143,7 +143,7 @@ sudo podman run --pull always --rm --replace --privileged --pid host --network h
 1) Ensure proper [Ethernet Port Setup](docs/howto_ethernet.md). You will want
 to have at least two secondary interfaces on the DPU, one to use for the OCP
 network (192.168.122.0/24?) and one for external.
-
+\
 In our original two-cluster setup, we only had the slow(er) primary (RJ45) interface
 and one secondary. That is almost too limited. You would need to come up with some
 elaborate network configuration (e.g. use the primary interface for the OCP network
@@ -174,7 +174,8 @@ OUT="$(
         "name": "arm64-infra-env",
         "cluster_id": "'"$CLUSTER_ID"'",
         "cpu_architecture": "arm64",
-        "pull_secret": "'$(cat ~/pull_secret.json | sed 's/"/\\"/g')'"
+        "pull_secret": "'"$(cat ~/pull_secret.json | sed 's/"/\\"/g')"'",
+        "ssh_authorized_key": "'"$(cat ~/.ssh/id_rsa.pub)"'"
       }'
     )"
 
@@ -183,6 +184,14 @@ DOWNLOAD_URL="$(jq -r '.download_url' <<< "$OUT")"
 INFRAENV_ID="$(jq -r '.id' <<< "$OUT")"
 printf 'DOWNLOAD_URL=%q\n' "$DOWNLOAD_URL"
 printf 'INFRAENV_ID=%q\n' "$INFRAENV_ID"
+
+aicli -u 0.0.0.0:8090 info infraenv "$INFRAENV_ID"
+```
+Alternatively, you can modify an existing infraenv with
+```bash
+curl -X PATCH "$AI_URL/api/assisted-install/v2/infra-envs/$INFRAENV_ID" -H "Content-Type: application/json" -d '{
+    "ssh_authorized_key": "'"$(cat ~/.ssh/id_rsa.pub)"'"
+  }'
 
 aicli -u 0.0.0.0:8090 info infraenv "$INFRAENV_ID"
 ```
@@ -299,6 +308,7 @@ oc get node
 
 1) deploy operator
 
-2) create DpuOperatorConfig
+2) create DpuOperatorConfig, for example `examples/config.yaml` from the
+operator's git repository.
 
 3) label host and DPU side with `dpu=true`
