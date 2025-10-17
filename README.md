@@ -171,7 +171,7 @@ aicli -u 0.0.0.0:8090 list infraenvs
 
 OUT="$(
     curl -X POST "$AI_URL/api/assisted-install/v2/infra-envs" -H "Content-Type: application/json" -d '{
-        "name": "arm64-infra-env",
+        "name": "ocpcluster-arm64",
         "cluster_id": "'"$CLUSTER_ID"'",
         "cpu_architecture": "arm64",
         "pull_secret": "'"$(cat ~/pull_secret.json | sed 's/"/\\"/g')"'",
@@ -218,7 +218,7 @@ sudo podman run --pull always --rm --replace --privileged --pid host --network h
 ```bash
 aicli -u 0.0.0.0:8090 list hosts
 
-HOST_ID="$(aicli -u 0.0.0.0:8090 list host | grep " arm64-infra-env " | awk '{ print $4 }')"
+HOST_ID="$(aicli -u 0.0.0.0:8090 list host | grep " ocpcluster-arm64 " | awk '{ print $4 }')"
 printf 'HOST_ID=%q\n' "$HOST_ID"
 ```
 
