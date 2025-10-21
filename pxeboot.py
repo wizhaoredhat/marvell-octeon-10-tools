@@ -1565,6 +1565,7 @@ def main() -> None:
 
     if ctx.cfg.host_setup_only:
         host_setup_only_msg = " (host-setup-only)"
+        host_ip = common_dpu.dpu_ip4addr
     else:
         other_host_ips = ssh_get_ipaddrs(ctx, host_ip=host_ip)
         if other_host_ips:
