@@ -43,13 +43,24 @@ def parse_args() -> argparse.Namespace:
 def _reset(try_idx: int, retry_count: int) -> None:
     logger.debug(f"serial: reset {common_dpu.TTYUSB1} (try {try_idx} of {retry_count})")
     with common.Serial(common_dpu.TTYUSB1) as ser:
-        time.sleep(1)
-        ser.send(KEY_CTRL_M * 2)
-        ser.expect("SCP Main Menu")
-        ser.send("m" + KEY_CTRL_M)
-        ser.expect("SCP Management Menu")
-        ser.send("r" + KEY_CTRL_M, sleep=0.5)
-        buffer = ser.read_all()
+        for i in range(10):
+            time.sleep(1)
+            ser.send(KEY_CTRL_M * 2)
+            b1 = ser.expect("uart:|SCP Main Menu")
+            if re.search("SCP Main Menu", b1):
+                ser.send("m" + KEY_CTRL_M)
+                ser.expect("SCP Management Menu")
+                ser.send("r" + KEY_CTRL_M, sleep=0.5)
+                buffer = ser.read_all()
+                break
+            elif re.search("uart:", b1):
+                ser.send("kernel reboot warm" + KEY_CTRL_M, sleep=0.05)
+                buffer = ser.read_all()
+                break
+            else:
+                continue
+        else:
+            raise RuntimeError(f"Error rebooting DPU via {common_dpu.TTYUSB1}")
         logger.debug(
             f"serial[{ser.port}]: reset complete (buffer content {repr(buffer)})"
         )
