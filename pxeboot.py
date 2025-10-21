@@ -1142,7 +1142,7 @@ def uefi_reset_and_enter_boot_menu(ctx: RunContext) -> None:
     ser.expect(".*")
 
     logger.info("waiting for instructions to access boot menu")
-    ser.expect("Press 'B' within 10 seconds for boot menu", 30)
+    ser.expect("Press 'B' within [0-9]+ seconds for boot menu", 30)
     ser.sleep(1)
     logger.info("Pressing B to access boot menu")
     ser.send("b")
