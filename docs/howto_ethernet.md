@@ -269,3 +269,11 @@ Choice: 9
 Program FEC
 (INS)FEC TYPE (NONE = 0, BASE_R = 1, RS_FEC = 2): 1
 ```
+
+To configure the Junos switch with 4 breakout connections set the channels (for
+example for port et-0/0/27):
+```
+configure
+set chassis fpc 0 pic 0 port 27 channel-speed 25g
+commit
+```
