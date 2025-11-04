@@ -269,3 +269,10 @@ Choice: 9
 Program FEC
 (INS)FEC TYPE (NONE = 0, BASE_R = 1, RS_FEC = 2): 1
 ```
+
+To configure the Junos switch with a 4x25G breakout (fanout) connection, set the following:
+```
+configure
+set chassis fpc 0 pic 0 port 27 channel-speed 25g
+commit
+```
