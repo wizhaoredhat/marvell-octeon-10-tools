@@ -991,7 +991,7 @@ def uefi_boot_menu_process(
     dpu_macs: dict[int, str] = {}
 
     search_count = 0
-    MAX_SEARCH_COUNT = 50
+    MAX_SEARCH_COUNT = 200
 
     line_pattern = re.compile(
         "\x1b\\[0m\x1b\\[37m\x1b\\[40m([^\x1b]*)\x1b\\[0m\x1b\\[30m\x1b\\[47m",
