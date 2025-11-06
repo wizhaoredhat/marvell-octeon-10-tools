@@ -2,7 +2,7 @@
 Marvell Octeon 10 Tools
 
 ```bash
-IMAGE=quay.io/sdaniele/marvell-tools:latest
+IMAGE=quay.io/wizhao/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" <cmd>
 ```
 
@@ -18,7 +18,7 @@ Utilize the serial interface at /dev/ttyUSB1 to trigger a reset of the associate
 
 Usage:
 ```bash
-IMAGE=quay.io/sdaniele/marvell-tools:latest
+IMAGE=quay.io/wizhao/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" \
   ./reset.py
 ```
@@ -62,7 +62,7 @@ The tool makes several assumptions.
 
 Usage:
 ```bash
-IMAGE=quay.io/sdaniele/marvell-tools:latest
+IMAGE=quay.io/wizhao/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" \
   ./pxeboot.py --help
 ```
@@ -75,7 +75,7 @@ We usually also want to setup that host in a way that is convenient for accessin
 
 Run
 ```bash
-IMAGE=quay.io/sdaniele/marvell-tools:latest
+IMAGE=quay.io/wizhao/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" host-setup
 ```
 
@@ -87,7 +87,7 @@ Utilize the serial interface at /dev/ttyUSB0 to update the card with the provide
 
 Usage:
 ```bash
-IMAGE=quay.io/sdaniele/marvell-tools:latest
+IMAGE=quay.io/wizhao/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it "$IMAGE" \
   ./fwupdate.py --dev eno4 /host/root/flash-uefi-cn10ka-11.24.02.img
 ```
@@ -109,7 +109,7 @@ On aarch64/arm64, the container also contains a build of octep_cp_agent from [gi
 See `/usr/bin/{octep_cp_agent,cn106xx.cfg}`. You can run:
 
 ```bash
-IMAGE=quay.io/sdaniele/marvell-tools:latest
+IMAGE=quay.io/wizhao/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools-cp-agent -v /:/host -v /dev:/dev -it "$IMAGE" \
   exec_octep_cp_agent
 ```
@@ -205,7 +205,7 @@ network. For example, using the `--prompt` option, to only start the DHCP, TFTP
 and HTTP servers. See also the `--dpu-dev` option to PXE boot from a secondary
 interface.
 ```bash
-IMAGE=quay.io/sdaniele/marvell-tools:latest
+IMAGE=quay.io/wizhao/marvell-tools:latest
 sudo podman run --pull always --rm --replace --privileged --pid host --network host --user 0 --name marvell-tools -v /:/host -v /dev:/dev -it \
     "$IMAGE" \
     ./pxeboot.py \
