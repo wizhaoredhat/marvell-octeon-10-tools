@@ -259,7 +259,7 @@ cat <<'EOF' > /usr/bin/run_octep_cp_agent
 #!/bin/bash
 
 CMD="${1:-run}"
-IMAGE="${IMAGE:-quay.io/sdaniele/marvell-tools:latest}"
+IMAGE="${IMAGE:-quay.io/wizhao/marvell-tools:latest}"
 IMAGE="${2:-$IMAGE}"
 NAME=marvell-tools-cp-agent
 
@@ -290,7 +290,7 @@ After=network-online.target
 [Service]
 ExecStart=/usr/bin/run_octep_cp_agent run
 ExecStop=/usr/bin/run_octep_cp_agent stop
-Environment="IMAGE=quay.io/sdaniele/marvell-tools:latest"
+Environment="IMAGE=quay.io/wizhao/marvell-tools:latest"
 
 [Install]
 WantedBy=multi-user.target
